@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { mcpClient, MCPServer, MCPSession } from "@/lib/mcp-client";
@@ -223,11 +224,11 @@ export default function UcpCompliancePage() {
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-green-50">
-                  <ShieldCheck className="h-5 w-5 text-green-600" />
+                <div className="p-2 rounded-lg bg-success/10">
+                  <ShieldCheck className="h-5 w-5 text-success" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-green-600">{compliantCount}</p>
+                  <p className="text-2xl font-bold text-success">{compliantCount}</p>
                   <p className="text-xs text-muted-foreground">UCP Compliant</p>
                 </div>
               </div>
@@ -237,11 +238,11 @@ export default function UcpCompliancePage() {
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-yellow-50">
-                  <ShieldAlert className="h-5 w-5 text-yellow-600" />
+                <div className="p-2 rounded-lg bg-warning/10">
+                  <ShieldAlert className="h-5 w-5 text-warning" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-yellow-600">{partialCount}</p>
+                  <p className="text-2xl font-bold text-warning">{partialCount}</p>
                   <p className="text-xs text-muted-foreground">Partial</p>
                 </div>
               </div>
@@ -251,11 +252,11 @@ export default function UcpCompliancePage() {
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-red-50">
-                  <ShieldX className="h-5 w-5 text-red-600" />
+                <div className="p-2 rounded-lg bg-destructive/10">
+                  <ShieldX className="h-5 w-5 text-destructive" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-red-600">{errorCount}</p>
+                  <p className="text-2xl font-bold text-destructive">{errorCount}</p>
                   <p className="text-xs text-muted-foreground">Unreachable</p>
                 </div>
               </div>
@@ -312,13 +313,13 @@ export default function UcpCompliancePage() {
                         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                       )}
                       {info.status === "connected" && isCompliant && (
-                        <ShieldCheck className="h-5 w-5 text-green-600" />
+                        <ShieldCheck className="h-5 w-5 text-success" />
                       )}
                       {info.status === "connected" && !isCompliant && (
-                        <ShieldAlert className="h-5 w-5 text-yellow-600" />
+                        <ShieldAlert className="h-5 w-5 text-warning" />
                       )}
                       {info.status === "error" && (
-                        <ShieldX className="h-5 w-5 text-red-600" />
+                        <ShieldX className="h-5 w-5 text-destructive" />
                       )}
                       {info.status === "idle" && (
                         <Server className="h-5 w-5 text-muted-foreground" />
@@ -332,22 +333,22 @@ export default function UcpCompliancePage() {
                     </div>
 
                     {isCompliant && (
-                      <div className="flex items-center gap-2 text-sm text-green-600 bg-green-50 px-3 py-1 rounded-full border border-green-200">
+                      <Badge variant="success" className="gap-2 text-sm px-3 py-1">
                         <Check className="h-4 w-4" />
                         UCP Compliant
-                      </div>
+                      </Badge>
                     )}
                     {info.status === "connected" && !isCompliant && (
-                      <div className="flex items-center gap-2 text-sm text-yellow-600 bg-yellow-50 px-3 py-1 rounded-full border border-yellow-200">
+                      <Badge variant="warning" className="gap-2 text-sm px-3 py-1">
                         <ShieldAlert className="h-4 w-4" />
                         Partial Compliance
-                      </div>
+                      </Badge>
                     )}
                     {info.status === "error" && (
-                      <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 px-3 py-1 rounded-full border border-red-200">
+                      <Badge variant="destructive" className="gap-2 text-sm px-3 py-1">
                         <X className="h-4 w-4" />
                         Connection Failed
-                      </div>
+                      </Badge>
                     )}
                   </div>
                     );
@@ -356,7 +357,7 @@ export default function UcpCompliancePage() {
 
                 {info.status === "error" && (
                   <CardContent className="pt-0">
-                    <div className="text-sm text-red-600 bg-red-50 p-3 rounded-lg border border-red-100">
+                    <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-lg border border-destructive/20">
                       {info.error}
                     </div>
                   </CardContent>
@@ -369,17 +370,14 @@ export default function UcpCompliancePage() {
                         <div className="flex items-center gap-2 mb-3">
                           <ShieldCheck className="h-4 w-4 text-muted-foreground" />
                           <span className="font-medium text-sm">Profile Discovery</span>
-                          <span
-                            className={`ml-auto text-xs px-2 py-0.5 rounded-full ${
-                              info.profileCheck.errors.length === 0
-                                ? "bg-green-100 text-green-700"
-                                : "bg-red-100 text-red-700"
-                            }`}
+                          <Badge
+                            variant={info.profileCheck.errors.length === 0 ? "success" : "destructive"}
+                            className="ml-auto text-xs"
                           >
                             {info.profileCheck.errors.length === 0
                               ? "Valid"
                               : `${info.profileCheck.errors.length} issue(s)`}
-                          </span>
+                          </Badge>
                         </div>
                         <div className="text-xs text-muted-foreground mb-2">
                           /.well-known/ucp • MCP service + checkout capability + spec/schema URLs
@@ -388,7 +386,7 @@ export default function UcpCompliancePage() {
                           {info.profileCheck.errors.map((err) => (
                             <div
                               key={err}
-                              className="flex items-center gap-2 text-xs py-1 px-2 rounded bg-red-50 text-red-700"
+                              className="flex items-center gap-2 text-xs py-1 px-2 rounded bg-destructive/10 text-destructive"
                             >
                               <X className="h-3 w-3" />
                               {err}
@@ -397,7 +395,7 @@ export default function UcpCompliancePage() {
                           {info.profileCheck.warnings.map((warn) => (
                             <div
                               key={warn}
-                              className="flex items-center gap-2 text-xs py-1 px-2 rounded bg-yellow-50 text-yellow-700"
+                              className="flex items-center gap-2 text-xs py-1 px-2 rounded bg-warning/10 text-warning"
                             >
                               <ShieldAlert className="h-3 w-3" />
                               {warn}
@@ -405,7 +403,7 @@ export default function UcpCompliancePage() {
                           ))}
                           {info.profileCheck.errors.length === 0 &&
                             info.profileCheck.warnings.length === 0 && (
-                              <div className="text-xs text-green-700 bg-green-50 px-2 py-1 rounded">
+                              <div className="text-xs text-success bg-success/10 px-2 py-1 rounded">
                                 Profile metadata looks valid.
                               </div>
                             )}
@@ -427,13 +425,12 @@ export default function UcpCompliancePage() {
                         <div className="flex items-center gap-2 mb-3">
                           <ShoppingCart className="h-4 w-4 text-muted-foreground" />
                           <span className="font-medium text-sm">Checkout Tools</span>
-                          <span className={`ml-auto text-xs px-2 py-0.5 rounded-full ${
-                            info.compliance.hasCheckout 
-                              ? "bg-green-100 text-green-700"
-                              : "bg-yellow-100 text-yellow-700"
-                          }`}>
+                          <Badge
+                            variant={info.compliance.hasCheckout ? "success" : "warning"}
+                            className="ml-auto text-xs"
+                          >
                             {info.compliance.presentRequired.length}/{UCP_REQUIRED_TOOLS.length}
-                          </span>
+                          </Badge>
                         </div>
                         <div className="space-y-1">
                           {UCP_REQUIRED_TOOLS.map((tool) => {
@@ -442,7 +439,7 @@ export default function UcpCompliancePage() {
                               <div
                                 key={tool}
                                 className={`flex items-center gap-2 text-xs py-1 px-2 rounded ${
-                                  hasIt ? "bg-green-50 text-green-700" : "bg-red-50 text-red-600"
+                                  hasIt ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"
                                 }`}
                               >
                                 {hasIt ? (
@@ -462,9 +459,9 @@ export default function UcpCompliancePage() {
                         <div className="flex items-center gap-2 mb-3">
                           <Package className="h-4 w-4 text-muted-foreground" />
                           <span className="font-medium text-sm">Product Tools</span>
-                          <span className="ml-auto text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                          <Badge variant="info" className="ml-auto text-xs">
                             {info.compliance.presentOptional.length}/{UCP_OPTIONAL_TOOLS.length}
-                          </span>
+                          </Badge>
                         </div>
                         <div className="space-y-1">
                           {UCP_OPTIONAL_TOOLS.map((tool) => {
@@ -473,7 +470,7 @@ export default function UcpCompliancePage() {
                               <div
                                 key={tool}
                                 className={`flex items-center gap-2 text-xs py-1 px-2 rounded ${
-                                  hasIt ? "bg-blue-50 text-blue-700" : "bg-muted text-muted-foreground"
+                                  hasIt ? "bg-info/10 text-info" : "bg-muted text-muted-foreground"
                                 }`}
                               >
                                 {hasIt ? (
@@ -499,7 +496,7 @@ export default function UcpCompliancePage() {
                             {info.compliance.paymentHandlers.map((handler) => (
                               <div
                                 key={handler}
-                                className="flex items-center gap-2 text-xs py-1 px-2 rounded bg-purple-50 text-purple-700"
+                                className="flex items-center gap-2 text-xs py-1 px-2 rounded bg-secondary text-secondary-foreground"
                               >
                                 <Check className="h-3 w-3" />
                                 <span className="font-mono">{handler}</span>
@@ -524,18 +521,13 @@ export default function UcpCompliancePage() {
                           const isUcp = info.compliance?.presentRequired.includes(tool.name);
                           const isOptional = info.compliance?.presentOptional.includes(tool.name);
                           return (
-                            <span
+                            <Badge
                               key={tool.name}
-                              className={`text-xs px-2 py-1 rounded border ${
-                                isUcp
-                                  ? "bg-green-50 text-green-700 border-green-200"
-                                  : isOptional
-                                  ? "bg-blue-50 text-blue-700 border-blue-200"
-                                  : "bg-muted text-muted-foreground"
-                              }`}
+                              variant={isUcp ? "success" : isOptional ? "info" : "outline"}
+                              className="text-xs"
                             >
                               {tool.name}
-                            </span>
+                            </Badge>
                           );
                         })}
                       </div>

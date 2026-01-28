@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import type { UcpCheckoutData } from "@/lib/ucp-utils";
 import { formatPrice } from "@/lib/ucp-utils";
 import {
@@ -23,36 +24,36 @@ interface CheckoutCardProps {
 
 const STATUS_CONFIG: Record<
   string,
-  { label: string; className: string; icon: React.ReactNode }
+  { label: string; variant: "warning" | "destructive" | "info" | "secondary" | "success"; icon: React.ReactNode }
 > = {
   incomplete: {
     label: "Incomplete",
-    className: "text-yellow-700 bg-yellow-50 border-yellow-200",
+    variant: "warning",
     icon: <AlertTriangle className="h-3.5 w-3.5" />,
   },
   requires_escalation: {
     label: "Requires Action",
-    className: "text-orange-700 bg-orange-50 border-orange-200",
+    variant: "warning",
     icon: <ExternalLink className="h-3.5 w-3.5" />,
   },
   ready_for_complete: {
     label: "Ready to Complete",
-    className: "text-blue-700 bg-blue-50 border-blue-200",
+    variant: "info",
     icon: <ShoppingCart className="h-3.5 w-3.5" />,
   },
   complete_in_progress: {
     label: "Processing",
-    className: "text-purple-700 bg-purple-50 border-purple-200",
+    variant: "secondary",
     icon: <Clock className="h-3.5 w-3.5" />,
   },
   completed: {
     label: "Order Placed",
-    className: "text-green-700 bg-green-50 border-green-200",
+    variant: "success",
     icon: <CheckCircle2 className="h-3.5 w-3.5" />,
   },
   canceled: {
     label: "Canceled",
-    className: "text-red-700 bg-red-50 border-red-200",
+    variant: "destructive",
     icon: <XCircle className="h-3.5 w-3.5" />,
   },
 };
@@ -80,12 +81,10 @@ export function CheckoutCard({ checkout, onCompleteCheckout }: CheckoutCardProps
         <div className="text-sm font-semibold text-foreground truncate">
           Checkout {checkout.id}
         </div>
-        <span
-          className={`flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full border font-medium ${statusCfg.className}`}
-        >
+        <Badge variant={statusCfg.variant} className="gap-1.5">
           {statusCfg.icon}
           {statusCfg.label}
-        </span>
+        </Badge>
       </div>
 
       {/* Line Items */}
@@ -154,30 +153,31 @@ export function CheckoutCard({ checkout, onCompleteCheckout }: CheckoutCardProps
       {/* Messages */}
       {checkout.messages && checkout.messages.length > 0 && (
         <div className="px-5 pb-3 space-y-1.5">
-          {checkout.messages.map((msg, i) => (
-            <div
-              key={i}
-              className={`text-xs p-2 rounded border ${
-                msg.type === "error"
-                  ? "bg-red-50 border-red-200 text-red-700"
-                  : msg.type === "warning"
-                  ? "bg-yellow-50 border-yellow-200 text-yellow-700"
-                  : "bg-blue-50 border-blue-200 text-blue-700"
-              }`}
-            >
-              <span className="font-medium">[{msg.code}]</span> {msg.content}
-              {msg.severity && (
-                <span className="ml-1 opacity-60">({msg.severity})</span>
-              )}
-            </div>
-          ))}
+          {checkout.messages.map((msg, i) => {
+            const msgVariant = msg.type === "error" ? "destructive" : msg.type === "warning" ? "warning" : "info";
+            const bgClass = msg.type === "error" ? "bg-destructive/10" : msg.type === "warning" ? "bg-warning/10" : "bg-info/10";
+            const borderClass = msg.type === "error" ? "border-destructive/20" : msg.type === "warning" ? "border-warning/20" : "border-info/20";
+            const textClass = msg.type === "error" ? "text-destructive" : msg.type === "warning" ? "text-warning" : "text-info";
+
+            return (
+              <div
+                key={i}
+                className={`text-xs p-2 rounded border ${bgClass} ${borderClass} ${textClass}`}
+              >
+                <span className="font-medium">[{msg.code}]</span> {msg.content}
+                {msg.severity && (
+                  <span className="ml-1 opacity-60">({msg.severity})</span>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 
       {/* Order Confirmation */}
       {checkout.order && (
-        <div className="px-5 py-3 bg-green-50 border-t border-green-200">
-          <div className="text-sm font-semibold text-green-800">
+        <div className="px-5 py-3 bg-success/10 border-t border-success/20">
+          <div className="text-sm font-semibold text-success">
             Order #{checkout.order.id} confirmed
           </div>
           {checkout.order.permalink_url && (
@@ -185,7 +185,7 @@ export function CheckoutCard({ checkout, onCompleteCheckout }: CheckoutCardProps
               href={checkout.order.permalink_url}
               target="_blank"
               rel="noreferrer"
-              className="text-xs text-green-700 underline"
+              className="text-xs text-success underline hover:text-success/80"
             >
               View order details
             </a>
@@ -195,11 +195,11 @@ export function CheckoutCard({ checkout, onCompleteCheckout }: CheckoutCardProps
 
       {/* Pay Now Button - shown when ready_for_complete */}
       {checkout.status === "ready_for_complete" && onCompleteCheckout && (
-        <div className="px-5 py-3 border-t bg-gradient-to-r from-blue-50 to-indigo-50">
+        <div className="px-5 py-3 border-t bg-info/5">
           <Button
             onClick={handlePayNow}
             disabled={isProcessing}
-            className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-medium"
+            className="w-full bg-info hover:bg-info/90 text-info-foreground font-medium"
           >
             {isProcessing ? (
               <>
@@ -229,7 +229,7 @@ export function CheckoutCard({ checkout, onCompleteCheckout }: CheckoutCardProps
               href={checkout.continue_url}
               target="_blank"
               rel="noreferrer"
-              className="text-xs text-blue-600 underline flex items-center gap-1 hover:text-blue-800"
+              className="text-xs text-info underline flex items-center gap-1 hover:text-info/80"
             >
               <ExternalLink className="h-3 w-3" />
               Continue in browser

@@ -3,10 +3,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { mcpClient, MCPServer, MCPSession } from "@/lib/mcp-client";
-import { Plus, Server, Wrench, Loader2, Check, X, ShieldCheck, ShieldAlert } from "lucide-react";
+import { Plus, Server, Wrench, Loader2, Check, X, ShieldCheck, ShieldAlert, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { checkUcpCompliance } from "@/lib/ucp-utils";
 
@@ -106,6 +107,31 @@ export function ServerPanel({ sessions, onSessionsChange }: ServerPanelProps) {
     }
   };
 
+  const handleDeleteServer = (serverUrl: string) => {
+    // Remove from saved servers
+    const updatedServers = savedServers.filter((s) => s.url !== serverUrl);
+    setSavedServers(updatedServers);
+    persistServers(updatedServers);
+
+    // Remove from statuses
+    setStatuses((prev) => {
+      const updated = { ...prev };
+      delete updated[serverUrl];
+      return updated;
+    });
+    setStatusErrors((prev) => {
+      const updated = { ...prev };
+      delete updated[serverUrl];
+      return updated;
+    });
+
+    // Disconnect the session if it exists
+    const updatedSessions = sessions.filter((s) => s.server.url !== serverUrl);
+    if (updatedSessions.length !== sessions.length) {
+      onSessionsChange(updatedSessions);
+    }
+  };
+
   const shorten = useMemo(
     () =>
       (text: string, max = 22) => {
@@ -120,7 +146,7 @@ export function ServerPanel({ sessions, onSessionsChange }: ServerPanelProps) {
       return <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />;
     }
     if (status === "ok") {
-      return <Check className="h-3 w-3 text-green-500" />;
+      return <Check className="h-3 w-3 text-success" />;
     }
     if (status === "error") {
       return <X className="h-3 w-3 text-destructive" />;
@@ -185,15 +211,26 @@ export function ServerPanel({ sessions, onSessionsChange }: ServerPanelProps) {
                         )}
                       </div>
                     </div>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 text-xs"
-                      onClick={() => connectAndTrack(server)}
-                      disabled={statuses[server.url] === "connecting"}
-                    >
-                      Retry
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 text-xs"
+                        onClick={() => connectAndTrack(server)}
+                        disabled={statuses[server.url] === "connecting"}
+                      >
+                        Retry
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7"
+                        onClick={() => handleDeleteServer(server.url)}
+                        title="Delete server"
+                      >
+                        <Trash2 className="h-3 w-3 text-destructive" />
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -230,20 +267,18 @@ export function ServerPanel({ sessions, onSessionsChange }: ServerPanelProps) {
                         </span>
                       </div>
                       {compliance.isCompliant ? (
-                        <Link
-                          href="/ucp"
-                          className="flex items-center gap-1 text-[10px] text-green-600 bg-green-50 px-2 py-0.5 rounded-full border border-green-200 hover:border-green-300 flex-shrink-0"
-                        >
-                          <ShieldCheck className="h-3 w-3" />
-                          UCP
+                        <Link href="/ucp">
+                          <Badge variant="success" className="gap-1 text-[10px] flex-shrink-0 cursor-pointer hover:opacity-80">
+                            <ShieldCheck className="h-3 w-3" />
+                            UCP
+                          </Badge>
                         </Link>
                       ) : (
-                        <Link
-                          href="/ucp"
-                          className="flex items-center gap-1 text-[10px] text-yellow-600 bg-yellow-50 px-2 py-0.5 rounded-full border border-yellow-200 hover:border-yellow-300 flex-shrink-0"
-                        >
-                          <ShieldAlert className="h-3 w-3" />
-                          Partial
+                        <Link href="/ucp">
+                          <Badge variant="warning" className="gap-1 text-[10px] flex-shrink-0 cursor-pointer hover:opacity-80">
+                            <ShieldAlert className="h-3 w-3" />
+                            Partial
+                          </Badge>
                         </Link>
                       )}
                     </div>
@@ -252,12 +287,12 @@ export function ServerPanel({ sessions, onSessionsChange }: ServerPanelProps) {
                     <div className="text-[10px] space-y-1 border-t pt-2">
                       <div className="flex items-center justify-between text-muted-foreground">
                         <span>Checkout Tools</span>
-                        <span className={compliance.hasCheckout ? "text-green-600" : "text-yellow-600"}>
+                        <span className={compliance.hasCheckout ? "text-success" : "text-warning"}>
                           {compliance.presentRequired.length}/5
                         </span>
                       </div>
                       {compliance.missingRequired.length > 0 && (
-                        <div className="text-[10px] text-yellow-600">
+                        <div className="text-[10px] text-warning">
                           Missing: {compliance.missingRequired.join(", ")}
                         </div>
                       )}
@@ -277,17 +312,17 @@ export function ServerPanel({ sessions, onSessionsChange }: ServerPanelProps) {
                             className={cn(
                               "flex items-center gap-2 text-xs",
                               "rounded px-2 py-1",
-                              isUcpTool 
-                                ? "bg-green-50 text-green-700 border border-green-100"
+                              isUcpTool
+                                ? "bg-success/10 text-success border border-success/20"
                                 : "bg-muted/50 text-muted-foreground"
                             )}
                           >
                             <Wrench className="h-3 w-3" />
                             <span className="truncate">{tool.name}</span>
                             {isUcpTool && (
-                              <span className="ml-auto text-[9px] bg-green-100 px-1.5 py-0.5 rounded">
+                              <Badge variant="success" className="ml-auto text-[9px] px-1.5 py-0">
                                 UCP
-                              </span>
+                              </Badge>
                             )}
                           </div>
                         );

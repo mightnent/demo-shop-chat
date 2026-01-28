@@ -120,14 +120,14 @@ export function MessageBubble({ message, onUIAction, onCompleteCheckout, renderM
         )}
 
         {renderMode === "mcp-apps" && isLoadingMcpApps && (
-          <div className="w-full flex items-center gap-2 p-4 bg-blue-50 border border-blue-200 rounded text-sm text-blue-700">
+          <div className="w-full flex items-center gap-2 p-4 bg-info/10 border border-info/20 rounded text-sm text-info">
             <Loader2 className="h-4 w-4 animate-spin" />
             Fetching MCP Apps resource via resources/read...
           </div>
         )}
 
         {renderMode === "mcp-apps" && mcpAppsError && (
-          <div className="w-full p-4 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+          <div className="w-full p-4 bg-destructive/10 border border-destructive/20 rounded text-sm text-destructive">
             MCP Apps Error: {mcpAppsError}
           </div>
         )}
@@ -144,12 +144,12 @@ export function MessageBubble({ message, onUIAction, onCompleteCheckout, renderM
         {normalizedResource && (
           <div className="w-full" style={{ minWidth: "600px", maxWidth: "900px" }}>
             {renderMode === "mcp-apps" && (
-              <div className="mb-2 px-2 py-1 bg-blue-50 border border-blue-200 rounded text-xs text-blue-700">
+              <div className="mb-2 px-2 py-1 bg-info/10 border border-info/20 rounded text-xs text-info">
                 MCP Apps Mode: fetched via resources/read ({message.mcpAppsResourceUri})
               </div>
             )}
             {renderMode === "classic" && (
-              <div className="mb-2 px-2 py-1 bg-gray-50 border border-gray-200 rounded text-xs text-gray-600">
+              <div className="mb-2 px-2 py-1 bg-muted border border-border rounded text-xs text-muted-foreground">
                 Classic Mode: using embedded resource from tool result
               </div>
             )}
