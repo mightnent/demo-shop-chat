@@ -108,7 +108,7 @@ export function ServerPanel({ sessions, onSessionsChange }: ServerPanelProps) {
 
   const shorten = useMemo(
     () =>
-      (text: string, max = 32) => {
+      (text: string, max = 22) => {
         if (text.length <= max) return text;
         return `${text.slice(0, max - 1)}…`;
       },
@@ -172,11 +172,11 @@ export function ServerPanel({ sessions, onSessionsChange }: ServerPanelProps) {
                     <div className="flex items-center gap-2 min-w-0">
                       {renderStatusIcon(statuses[server.url])}
                       <div className="flex flex-col min-w-0">
-                        <span className="text-xs font-medium truncate max-w-[220px]">
+                        <span className="text-xs font-medium truncate max-w-[160px]">
                           {shorten(server.name, 40)}
                         </span>
-                        <span className="text-[11px] text-muted-foreground truncate max-w-[220px]">
-                          {shorten(server.url, 48)}
+                        <span className="text-[11px] text-muted-foreground truncate max-w-[160px]">
+                          {shorten(server.url, 34)}
                         </span>
                         {statuses[server.url] === "error" && statusErrors[server.url] && (
                           <span className="text-[11px] text-destructive truncate">
@@ -225,8 +225,8 @@ export function ServerPanel({ sessions, onSessionsChange }: ServerPanelProps) {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 min-w-0">
                         {renderStatusIcon(statuses[session.server.url] || "ok")}
-                        <span className="text-xs font-medium truncate max-w-[200px]">
-                          {shorten(session.server.name, 40)}
+                        <span className="text-xs font-medium truncate max-w-[140px]">
+                          {shorten(session.server.name, 28)}
                         </span>
                       </div>
                       {compliance.isCompliant ? (
