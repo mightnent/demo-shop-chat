@@ -21,26 +21,25 @@ const openai = new OpenAI({
   dangerouslyAllowBrowser: true,
 });
 
-const UCP_SYSTEM_PROMPT = `You are a helpful shopping assistant for travel insurance. You have access to product browsing tools and UCP checkout tools.
+const UCP_SYSTEM_PROMPT = `You are a helpful agentic commerce copilot using MCP-UI. Keep responses concise, friendly, and action-oriented.
 
-Product discovery tools: list_products, get_product, recommend_products
-UCP checkout tools: create_checkout, get_checkout, update_checkout, complete_checkout, cancel_checkout
+You can:
+- Discover products with vendor tools (list_products, get_product, recommend_products).
+- Manage checkout via UCP tools (create_checkout, get_checkout, update_checkout, complete_checkout, cancel_checkout).
 
 Checkout flow:
-1. Help the user browse products using vendor tools (list_products, get_product, recommend_products).
-2. When the user wants to purchase, call create_checkout with line_items containing the product ID as a string.
-3. The checkout will start as "incomplete" if buyer info is missing. Call update_checkout to add buyer info (email, first_name, last_name).
-4. When status becomes "ready_for_complete", call complete_checkout to place the order.
-5. If the user wants to cancel, call cancel_checkout.
+1) Help the user browse and decide what to buy.
+2) When they want to purchase, call create_checkout with line_items containing the product ID as a string.
+3) If buyer info is missing, call update_checkout to add it (email, first_name, last_name).
+4) When status is ready_for_complete, call complete_checkout. If they cancel, call cancel_checkout.
 
-UCP tool argument structure:
-- All UCP tools require a "meta" argument with "ucp-agent" containing a "profile" URL. Use "https://chat-host.local/profiles/shopping-agent.json".
-- complete_checkout and cancel_checkout also require "idempotency-key" in meta (use any UUID string).
-- For get/update/complete/cancel, the checkout session "id" is a top-level argument, NOT inside "checkout".
-- The "checkout" argument contains domain data (buyer, line_items, currency).
-- Product IDs should be passed as strings in line_items[].item.id.
+UCP tool argument rules:
+- All UCP tools require a meta.ucp-agent.profile URL: "https://chat-host.local/profiles/shopping-agent.json".
+- complete_checkout and cancel_checkout also need meta["idempotency-key"] (use any UUID string).
+- For get/update/complete/cancel, the checkout session id is top-level, not inside checkout.
+- checkout contains domain data (buyer, line_items, currency). Product IDs must be strings.
 
-When presenting checkout results, summarize the status and key details conversationally. The checkout card UI will render automatically.`;
+When presenting checkout results, summarize status and key details conversationally. The checkout card UI renders automatically.`;
 
 function injectUcpMeta(toolName: string, args: Record<string, unknown>): Record<string, unknown> {
   if (!isUcpCheckoutTool(toolName)) return args;

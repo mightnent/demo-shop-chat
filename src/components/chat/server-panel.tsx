@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -106,6 +106,15 @@ export function ServerPanel({ sessions, onSessionsChange }: ServerPanelProps) {
     }
   };
 
+  const shorten = useMemo(
+    () =>
+      (text: string, max = 32) => {
+        if (text.length <= max) return text;
+        return `${text.slice(0, max - 1)}…`;
+      },
+    [],
+  );
+
   const renderStatusIcon = (status: ServerStatus | undefined) => {
     if (status === "connecting") {
       return <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />;
@@ -163,9 +172,11 @@ export function ServerPanel({ sessions, onSessionsChange }: ServerPanelProps) {
                     <div className="flex items-center gap-2 min-w-0">
                       {renderStatusIcon(statuses[server.url])}
                       <div className="flex flex-col min-w-0">
-                        <span className="text-xs font-medium truncate">{server.name}</span>
-                        <span className="text-[11px] text-muted-foreground truncate">
-                          {server.url}
+                        <span className="text-xs font-medium truncate max-w-[220px]">
+                          {shorten(server.name, 40)}
+                        </span>
+                        <span className="text-[11px] text-muted-foreground truncate max-w-[220px]">
+                          {shorten(server.url, 48)}
                         </span>
                         {statuses[server.url] === "error" && statusErrors[server.url] && (
                           <span className="text-[11px] text-destructive truncate">
@@ -212,16 +223,16 @@ export function ServerPanel({ sessions, onSessionsChange }: ServerPanelProps) {
                     className="rounded-lg border bg-card p-3 space-y-2"
                   >
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
                         {renderStatusIcon(statuses[session.server.url] || "ok")}
-                        <span className="text-xs font-medium truncate">
-                          {session.server.name}
+                        <span className="text-xs font-medium truncate max-w-[200px]">
+                          {shorten(session.server.name, 40)}
                         </span>
                       </div>
                       {compliance.isCompliant ? (
                         <Link
                           href="/ucp"
-                          className="flex items-center gap-1 text-[10px] text-green-600 bg-green-50 px-2 py-0.5 rounded-full border border-green-200 hover:border-green-300"
+                          className="flex items-center gap-1 text-[10px] text-green-600 bg-green-50 px-2 py-0.5 rounded-full border border-green-200 hover:border-green-300 flex-shrink-0"
                         >
                           <ShieldCheck className="h-3 w-3" />
                           UCP
@@ -229,7 +240,7 @@ export function ServerPanel({ sessions, onSessionsChange }: ServerPanelProps) {
                       ) : (
                         <Link
                           href="/ucp"
-                          className="flex items-center gap-1 text-[10px] text-yellow-600 bg-yellow-50 px-2 py-0.5 rounded-full border border-yellow-200 hover:border-yellow-300"
+                          className="flex items-center gap-1 text-[10px] text-yellow-600 bg-yellow-50 px-2 py-0.5 rounded-full border border-yellow-200 hover:border-yellow-300 flex-shrink-0"
                         >
                           <ShieldAlert className="h-3 w-3" />
                           Partial
