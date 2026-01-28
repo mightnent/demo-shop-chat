@@ -152,7 +152,7 @@ export function CheckoutCard({ checkout, onCompleteCheckout }: CheckoutCardProps
       )}
 
       {/* Messages */}
-      {checkout.messages.length > 0 && (
+      {checkout.messages && checkout.messages.length > 0 && (
         <div className="px-5 pb-3 space-y-1.5">
           {checkout.messages.map((msg, i) => (
             <div
