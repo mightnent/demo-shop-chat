@@ -41,13 +41,6 @@ interface ServerComplianceInfo {
 
 const STORAGE_KEY = "mcpSavedServers";
 
-const DEFAULT_SERVERS: MCPServer[] = [
-  {
-    name: "travel-insurance-mcp",
-    url: "http://localhost:3002/api/mcp",
-  },
-];
-
 export default function UcpCompliancePage() {
   const [serverUrl, setServerUrl] = useState("");
   const [servers, setServers] = useState<ServerComplianceInfo[]>([]);
@@ -69,13 +62,7 @@ export default function UcpCompliancePage() {
 
     const storedRaw = localStorage.getItem(STORAGE_KEY);
     const stored: MCPServer[] = storedRaw ? JSON.parse(storedRaw) : [];
-    const allServers = [...DEFAULT_SERVERS];
-    
-    stored.forEach((s) => {
-      if (!allServers.some((d) => d.url === s.url)) {
-        allServers.push(s);
-      }
-    });
+    const allServers = [...stored];
 
     const serverInfos: ServerComplianceInfo[] = allServers.map((server) => ({
       server,

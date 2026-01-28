@@ -19,13 +19,6 @@ type ServerStatus = "idle" | "connecting" | "ok" | "error";
 
 const STORAGE_KEY = "mcpSavedServers";
 
-const DEFAULT_SERVERS: MCPServer[] = [
-  {
-    name: "travel-insurance-mcp",
-    url: "http://localhost:3002/api/mcp",
-  },
-];
-
 export function ServerPanel({ sessions, onSessionsChange }: ServerPanelProps) {
   const [serverUrl, setServerUrl] = useState("");
   const [isConnecting, setIsConnecting] = useState(false);
@@ -77,7 +70,7 @@ export function ServerPanel({ sessions, onSessionsChange }: ServerPanelProps) {
 
     const storedRaw = localStorage.getItem(STORAGE_KEY);
     const stored: MCPServer[] = storedRaw ? JSON.parse(storedRaw) : [];
-    const initial = dedupeServers([...DEFAULT_SERVERS, ...stored]);
+    const initial = dedupeServers(stored);
 
     setSavedServers(initial);
     persistServers(initial);
