@@ -331,8 +331,29 @@ export function ChatContainer() {
   return (
     <div className="flex h-screen bg-background">
       {showServers && (
-        <aside className="w-72 border-r p-4 hidden md:block">
+        <aside className="w-72 border-r p-4 hidden md:flex md:flex-col">
           <ServerPanel sessions={sessions} onSessionsChange={setSessions} />
+
+          <div className="mt-auto pt-4 border-t">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-xs text-muted-foreground">
+                {renderMode === "classic" ? "Classic MCP-UI" : "MCP Apps"}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={toggleRenderMode}
+                className="gap-2"
+              >
+                {renderMode === "classic" ? (
+                  <ToggleLeft className="h-4 w-4" />
+                ) : (
+                  <ToggleRight className="h-4 w-4 text-primary" />
+                )}
+                {renderMode === "classic" ? "Classic" : "MCP Apps"}
+              </Button>
+            </div>
+          </div>
         </aside>
       )}
 
@@ -353,29 +374,9 @@ export function ChatContainer() {
           </Button>
           <div className="flex-1">
             <h1 className="text-lg font-semibold">Chat</h1>
-            <p className="text-sm text-muted-foreground">
-              Agentic Commerce and Payment Demo
-            </p>
+            
           </div>
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">
-                {renderMode === "classic" ? "Classic MCP-UI" : "MCP Apps"}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={toggleRenderMode}
-                className="gap-2"
-              >
-                {renderMode === "classic" ? (
-                  <ToggleLeft className="h-4 w-4" />
-                ) : (
-                  <ToggleRight className="h-4 w-4 text-primary" />
-                )}
-                {renderMode === "classic" ? "Classic" : "MCP Apps"}
-              </Button>
-            </div>
             <div className="flex items-center gap-2 pl-4 border-l">
               <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
                 <span className="text-xs font-medium text-primary">{MOCK_USER.avatarInitials}</span>
