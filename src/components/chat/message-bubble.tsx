@@ -16,6 +16,7 @@ interface MessageBubbleProps {
   message: Message;
   onUIAction?: (action: UIActionResult) => Promise<unknown>;
   onCompleteCheckout?: (checkoutId: string) => Promise<void>;
+  onEcpComplete?: (checkout: Message["ucpCheckout"], serverUrl?: string) => void;
   renderMode?: RenderMode;
 }
 
@@ -30,7 +31,7 @@ function normalizeResourceForRenderer(resource: any) {
   return resource;
 }
 
-export function MessageBubble({ message, onUIAction, onCompleteCheckout, renderMode = "classic" }: MessageBubbleProps) {
+export function MessageBubble({ message, onUIAction, onCompleteCheckout, onEcpComplete, renderMode = "classic" }: MessageBubbleProps) {
   const isUser = message.role === "user";
   const [mcpAppsResource, setMcpAppsResource] = useState<UIResource | null>(null);
   const [isLoadingMcpApps, setIsLoadingMcpApps] = useState(false);
@@ -137,6 +138,7 @@ export function MessageBubble({ message, onUIAction, onCompleteCheckout, renderM
             <CheckoutCard
               checkout={message.ucpCheckout}
               onCompleteCheckout={onCompleteCheckout}
+              onEcpComplete={(checkout) => onEcpComplete?.(checkout, message.serverUrl)}
             />
           </div>
         )}

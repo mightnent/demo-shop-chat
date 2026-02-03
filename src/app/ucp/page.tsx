@@ -13,6 +13,7 @@ import {
   UCP_OPTIONAL_TOOLS,
   validateUcpProfile,
   UcpProfileCheckResult,
+  extractPaymentHandlers,
 } from "@/lib/ucp-utils";
 import {
   ShieldCheck,
@@ -36,6 +37,7 @@ interface ServerComplianceInfo {
   session?: MCPSession;
   compliance?: UcpComplianceResult;
   profileCheck?: UcpProfileCheckResult;
+  profile?: Record<string, unknown>;
   status: "idle" | "connecting" | "connected" | "error";
   error?: string;
 }
@@ -85,11 +87,24 @@ export default function UcpCompliancePage() {
         const compliance = checkUcpCompliance(session.tools);
         const profile = await fetchUcpProfile(info.server);
         const profileCheck = validateUcpProfile(profile, info.server.url);
+        const paymentHandlers = extractPaymentHandlers(profile);
+        const hasEmbedded = Boolean(
+          (profile.ucp?.services?.["dev.ucp.shopping"] || []).find(
+            (svc: any) => svc.transport === "embedded"
+          )
+        );
 
         setServers((prev) =>
           prev.map((s, idx) =>
             idx === i
-              ? { ...s, status: "connected", session, compliance, profileCheck }
+              ? {
+                  ...s,
+                  status: "connected",
+                  session,
+                  compliance: { ...compliance, paymentHandlers, hasEmbedded },
+                  profileCheck,
+                  profile,
+                }
               : s
           )
         );
@@ -141,11 +156,24 @@ export default function UcpCompliancePage() {
       const compliance = checkUcpCompliance(session.tools);
       const profile = await fetchUcpProfile(newServer);
       const profileCheck = validateUcpProfile(profile, newServer.url);
+      const paymentHandlers = extractPaymentHandlers(profile);
+      const hasEmbedded = Boolean(
+        (profile.ucp?.services?.["dev.ucp.shopping"] || []).find(
+          (svc: any) => svc.transport === "embedded"
+        )
+      );
 
       setServers((prev) =>
         prev.map((s) =>
           s.server.url === newServer.url
-            ? { ...s, status: "connected", session, compliance, profileCheck }
+            ? {
+                ...s,
+                status: "connected",
+                session,
+                compliance: { ...compliance, paymentHandlers, hasEmbedded },
+                profileCheck,
+                profile,
+              }
             : s
         )
       );
@@ -415,6 +443,70 @@ export default function UcpCompliancePage() {
                     {info.compliance.ucpVersion && (
                       <div className="text-sm text-muted-foreground">
                         UCP Version: <span className="font-mono">{info.compliance.ucpVersion}</span>
+                      </div>
+                    )}
+                    {typeof info.compliance.hasEmbedded === "boolean" && (
+                      <div className="text-sm text-muted-foreground">
+                        Embedded Checkout (ECP):{" "}
+                        <span className={info.compliance.hasEmbedded ? "text-success" : "text-warning"}>
+                          {info.compliance.hasEmbedded ? "Yes" : "No"}
+                        </span>
+                      </div>
+                    )}
+                    <div className="text-sm text-muted-foreground flex items-center gap-2">
+                      <span>Profile:</span>
+                      <a
+                        href={`${new URL(info.server.url).origin}/.well-known/ucp`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-primary underline"
+                      >
+                        Open /.well-known/ucp
+                      </a>
+                    </div>
+                    {info.profile && (
+                      <div className="text-xs text-muted-foreground space-y-1">
+                        {(() => {
+                          const services = (info.profile?.ucp as any)?.services?.["dev.ucp.shopping"] || [];
+                          const mcpSvc = services.find((svc: any) => svc.transport === "mcp");
+                          const embeddedSvc = services.find((svc: any) => svc.transport === "embedded");
+                          return (
+                            <>
+                              {mcpSvc?.spec && (
+                                <div>
+                                  MCP Spec:{" "}
+                                  <a href={mcpSvc.spec} target="_blank" rel="noreferrer" className="text-primary underline">
+                                    {mcpSvc.spec}
+                                  </a>
+                                </div>
+                              )}
+                              {mcpSvc?.schema && (
+                                <div>
+                                  MCP Schema:{" "}
+                                  <a href={mcpSvc.schema} target="_blank" rel="noreferrer" className="text-primary underline">
+                                    {mcpSvc.schema}
+                                  </a>
+                                </div>
+                              )}
+                              {embeddedSvc?.spec && (
+                                <div>
+                                  Embedded Spec:{" "}
+                                  <a href={embeddedSvc.spec} target="_blank" rel="noreferrer" className="text-primary underline">
+                                    {embeddedSvc.spec}
+                                  </a>
+                                </div>
+                              )}
+                              {embeddedSvc?.schema && (
+                                <div>
+                                  Embedded Schema:{" "}
+                                  <a href={embeddedSvc.schema} target="_blank" rel="noreferrer" className="text-primary underline">
+                                    {embeddedSvc.schema}
+                                  </a>
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()}
                       </div>
                     )}
 

@@ -38,6 +38,7 @@ export interface UcpComplianceResult {
   presentOptional: string[];
   paymentHandlers: string[];
   ucpVersion?: string;
+  hasEmbedded?: boolean;
 }
 
 export function checkUcpCompliance(tools: MCPTool[]): UcpComplianceResult {
@@ -58,6 +59,7 @@ export function checkUcpCompliance(tools: MCPTool[]): UcpComplianceResult {
     presentOptional,
     paymentHandlers: [], // Will be populated from server response
     ucpVersion: hasCheckout ? "2026-01-11" : undefined,
+    hasEmbedded: false,
   };
 }
 
@@ -97,6 +99,9 @@ export function validateUcpProfile(
   })();
 
   const mcpService = shoppingServices.find((svc) => svc.transport === "mcp");
+  const embeddedService = shoppingServices.find(
+    (svc) => svc.transport === "embedded"
+  );
   const hasMcpService = Boolean(mcpService);
   if (!mcpService) {
     errors.push("Missing dev.ucp.shopping MCP service entry");
@@ -123,6 +128,19 @@ export function validateUcpProfile(
     }
     if (!spec || !isUcpDevUrl(spec)) {
       errors.push("MCP service spec must be a https://ucp.dev URL");
+    }
+  }
+
+  if (!embeddedService) {
+    warnings.push("Missing dev.ucp.shopping embedded service entry (ECP)");
+  } else {
+    const schema = typeof embeddedService.schema === "string" ? embeddedService.schema : undefined;
+    const spec = typeof embeddedService.spec === "string" ? embeddedService.spec : undefined;
+    if (!schema || !isUcpDevUrl(schema)) {
+      errors.push("Embedded service schema must be a https://ucp.dev URL");
+    }
+    if (!spec || !isUcpDevUrl(spec)) {
+      errors.push("Embedded service spec must be a https://ucp.dev URL");
     }
   }
 
@@ -159,9 +177,26 @@ export function validateUcpProfile(
   };
 }
 
+export function extractPaymentHandlers(profile: Record<string, unknown>): string[] {
+  const ucp = (profile.ucp || {}) as Record<string, unknown>;
+  const paymentHandlers = (ucp.payment_handlers || {}) as Record<string, unknown>;
+  return Object.keys(paymentHandlers);
+}
+
 export interface UcpCheckoutData {
   ucp: {
     version: string;
+    services?: Record<
+      string,
+      Array<{
+        version: string;
+        transport?: string;
+        spec?: string;
+        schema?: string;
+        endpoint?: string;
+        config?: Record<string, unknown>;
+      }>
+    >;
     capabilities: Record<string, Array<{ version: string }>>;
     payment_handlers?: Record<
       string,
@@ -190,6 +225,9 @@ export interface UcpCheckoutData {
     severity?: string;
     path?: string;
   }>;
+  payment?: {
+    instruments?: Array<Record<string, unknown>>;
+  };
   continue_url?: string;
   expires_at?: string;
   links?: Array<{ type: string; url: string; title?: string }>;

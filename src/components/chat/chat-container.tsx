@@ -14,7 +14,7 @@ import { PanelLeftOpen, PanelRightClose, ToggleLeft, ToggleRight, User } from "l
 import { MOCK_USER, getMockBuyerInfo } from "@/lib/mock-user";
 import Link from "next/link";
 import OpenAI from "openai";
-import { isUcpCheckoutTool, parseUcpCheckoutResponse } from "@/lib/ucp-utils";
+import { formatPrice, isUcpCheckoutTool, parseUcpCheckoutResponse, UcpCheckoutData } from "@/lib/ucp-utils";
 
 const openai = new OpenAI({
   apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY || "",
@@ -31,15 +31,25 @@ Checkout flow:
 1) Help the user browse and decide what to buy.
 2) When they want to purchase, call create_checkout with line_items containing the product ID as a string.
 3) If buyer info is missing, call update_checkout to add it (email, first_name, last_name).
-4) When status is ready_for_complete, call complete_checkout. If they cancel, call cancel_checkout.
+4) If checkout offers embedded checkout (continue_url + embedded binding), let the UI handle payment via ECP.
+5) Otherwise, when status is ready_for_complete, call complete_checkout. If they cancel, call cancel_checkout.
 
 UCP tool argument rules:
 - All UCP tools require a meta.ucp-agent.profile URL: "https://chat-host.local/profiles/shopping-agent.json".
 - complete_checkout and cancel_checkout also need meta["idempotency-key"] (use any UUID string).
+- complete_checkout may also include top-level idempotency_key (if present, it must match meta["idempotency-key"]).
 - For get/update/complete/cancel, the checkout session id is top-level, not inside checkout.
 - checkout contains domain data (buyer, line_items, currency). Product IDs must be strings.
 
 When presenting checkout results, summarize status and key details conversationally. The checkout card UI renders automatically.`;
+
+function getToolText(result: any): string {
+  if (!result || !result.content) return "";
+  return result.content
+    .filter((c: any) => c.type === "text")
+    .map((c: any) => c.text)
+    .join("\n");
+}
 
 function injectUcpMeta(toolName: string, args: Record<string, unknown>): Record<string, unknown> {
   if (!isUcpCheckoutTool(toolName)) return args;
@@ -55,6 +65,11 @@ function injectUcpMeta(toolName: string, args: Record<string, unknown>): Record<
     !meta["idempotency-key"]
   ) {
     meta["idempotency-key"] = crypto.randomUUID();
+  }
+  if (toolName === "complete_checkout") {
+    if (!args.idempotency_key) {
+      args.idempotency_key = meta["idempotency-key"];
+    }
   }
 
   // Auto-inject mock buyer info for create_checkout and update_checkout
@@ -117,7 +132,19 @@ export function ChatContainer() {
     try {
       const args = injectUcpMeta("complete_checkout", {
         id: checkoutId,
-        checkout: {},
+        checkout: {
+          payment: {
+            instruments: [
+              {
+                id: `instr_${checkoutId}`,
+                handler_id: "mock_handler_1",
+                type: "token",
+                selected: true,
+                credential: { type: "mock_token", token: "tok_demo" },
+              },
+            ],
+          },
+        },
       });
 
       const result = await mcpClient.callTool(match.serverUrl, "complete_checkout", args);
@@ -135,7 +162,8 @@ export function ChatContainer() {
           messageContent = `Checkout ${checkoutData.id} - Status: ${checkoutData.status}`;
         }
       } else {
-        messageContent = "Payment processed. Unable to retrieve order details.";
+        const text = getToolText(result);
+        messageContent = text || "Payment processed. Unable to retrieve order details.";
       }
 
       chatStore.addMessage({
@@ -152,6 +180,23 @@ export function ChatContainer() {
     } finally {
       chatStore.setLoading(false);
     }
+  };
+
+  const handleEcpComplete = (checkout: UcpCheckoutData | undefined, serverUrl?: string) => {
+    if (!checkout) return;
+
+    const total = checkout.totals.find((t) => t.type === "total");
+    const itemNames = checkout.line_items
+      .map((li) => li.item.title || `Product #${li.item.id}`)
+      .join(", ");
+    const messageContent = `🎉 **Order Placed Successfully!**\n\n**Order #${checkout.order?.id || checkout.id}**\n- Items: ${itemNames}\n- Total: ${total ? formatPrice(total.amount, checkout.currency) : "N/A"}\n\nThank you for your purchase!`;
+
+    chatStore.addMessage({
+      role: "assistant",
+      content: messageContent,
+      ucpCheckout: checkout,
+      serverUrl,
+    });
   };
 
   const handleUIAction = async (action: UIActionResult) => {
@@ -184,7 +229,7 @@ export function ChatContainer() {
               role: "assistant",
               content: checkoutData
                 ? `Checkout ${checkoutData.id} - Status: ${checkoutData.status}`
-                : `Tool ${actionToolName} executed.`,
+                : (getToolText(result) || `Tool ${actionToolName} executed.`),
               ucpCheckout: checkoutData || undefined,
               serverUrl: match.serverUrl,
             });
@@ -280,7 +325,7 @@ export function ChatContainer() {
               const checkoutData = parseUcpCheckoutResponse(result);
               const textSummary = checkoutData
                 ? `Checkout ${checkoutData.id} - Status: ${checkoutData.status}`
-                : "Checkout operation completed.";
+                : (getToolText(result) || "Checkout operation completed.");
 
               chatStore.addMessage({
                 role: "assistant",
@@ -404,6 +449,7 @@ export function ChatContainer() {
                   message={message}
                   onUIAction={handleUIAction}
                   onCompleteCheckout={handleCompleteCheckout}
+                  onEcpComplete={handleEcpComplete}
                   renderMode={renderMode}
                 />
               ))

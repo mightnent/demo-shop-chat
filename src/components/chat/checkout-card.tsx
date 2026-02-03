@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { UcpCheckoutData } from "@/lib/ucp-utils";
 import { formatPrice } from "@/lib/ucp-utils";
+import { EcpEmbed } from "./ecp-embed";
 import {
   ShoppingCart,
   CheckCircle2,
@@ -20,6 +21,7 @@ import {
 interface CheckoutCardProps {
   checkout: UcpCheckoutData;
   onCompleteCheckout?: (checkoutId: string) => Promise<void>;
+  onEcpComplete?: (checkout: UcpCheckoutData) => void;
 }
 
 const STATUS_CONFIG: Record<
@@ -58,9 +60,12 @@ const STATUS_CONFIG: Record<
   },
 };
 
-export function CheckoutCard({ checkout, onCompleteCheckout }: CheckoutCardProps) {
+export function CheckoutCard({ checkout, onCompleteCheckout, onEcpComplete }: CheckoutCardProps) {
   const statusCfg = STATUS_CONFIG[checkout.status] || STATUS_CONFIG.incomplete;
   const [isProcessing, setIsProcessing] = useState(false);
+  const hasEmbedded = Boolean(
+    checkout.ucp.services?.["dev.ucp.shopping"]?.some((svc) => svc.transport === "embedded")
+  );
 
   const handlePayNow = async () => {
     if (!onCompleteCheckout) return;
@@ -193,8 +198,8 @@ export function CheckoutCard({ checkout, onCompleteCheckout }: CheckoutCardProps
         </div>
       )}
 
-      {/* Pay Now Button - shown when ready_for_complete */}
-      {checkout.status === "ready_for_complete" && onCompleteCheckout && (
+      {/* Pay Now Button - shown when ready_for_complete and no embedded checkout */}
+      {checkout.status === "ready_for_complete" && onCompleteCheckout && !hasEmbedded && (
         <div className="px-5 py-3 border-t bg-info/5">
           <Button
             onClick={handlePayNow}
@@ -236,6 +241,8 @@ export function CheckoutCard({ checkout, onCompleteCheckout }: CheckoutCardProps
             </a>
           </div>
         )}
+
+      {hasEmbedded && <EcpEmbed checkout={checkout} onComplete={onEcpComplete} />}
     </Card>
   );
 }
