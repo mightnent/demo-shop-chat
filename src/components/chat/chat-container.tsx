@@ -157,7 +157,7 @@ export function ChatContainer() {
         if (checkoutData.status === "completed") {
           const total = checkoutData.totals.find((t) => t.type === "total");
           const itemNames = checkoutData.line_items.map((li) => li.item.title || `Product #${li.item.id}`).join(", ");
-          messageContent = `🎉 **Order Placed Successfully!**\n\n**Order #${checkoutData.order?.id || checkoutId}**\n- Items: ${itemNames}\n- Total: $${total ? (total.amount / 100).toFixed(2) : "N/A"}\n\nThank you for your purchase!`;
+          messageContent = "Payment completed.";
         } else {
           messageContent = `Checkout ${checkoutData.id} - Status: ${checkoutData.status}`;
         }
@@ -189,7 +189,7 @@ export function ChatContainer() {
     const itemNames = checkout.line_items
       .map((li) => li.item.title || `Product #${li.item.id}`)
       .join(", ");
-    const messageContent = `🎉 **Order Placed Successfully!**\n\n**Order #${checkout.order?.id || checkout.id}**\n- Items: ${itemNames}\n- Total: ${total ? formatPrice(total.amount, checkout.currency) : "N/A"}\n\nThank you for your purchase!`;
+    const messageContent = "Payment completed.";
 
     chatStore.addMessage({
       role: "assistant",
