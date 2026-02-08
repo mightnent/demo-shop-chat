@@ -18,6 +18,7 @@ export function ChatInput({
 }: ChatInputProps) {
   const [message, setMessage] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const shouldRestoreFocusRef = useRef(false);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -29,9 +30,17 @@ export function ChatInput({
     }
   }, [message]);
 
+  useEffect(() => {
+    if (!disabled && shouldRestoreFocusRef.current && textareaRef.current) {
+      textareaRef.current.focus();
+      shouldRestoreFocusRef.current = false;
+    }
+  }, [disabled]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (message.trim() && !disabled) {
+      shouldRestoreFocusRef.current = true;
       onSend(message.trim());
       setMessage("");
     }
