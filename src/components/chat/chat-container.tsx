@@ -374,7 +374,7 @@ export function ChatContainer() {
   };
 
   return (
-    <div className="flex h-screen bg-background">
+    <div className="flex h-dvh min-h-0 bg-background">
       {showServers && (
         <aside className="w-72 border-r p-4 hidden md:flex md:flex-col">
           <ServerPanel sessions={sessions} onSessionsChange={setSessions} />
@@ -402,12 +402,12 @@ export function ChatContainer() {
         </aside>
       )}
 
-      <main className="flex-1 flex flex-col">
-        <header className="border-b px-6 py-4 flex items-center gap-3">
+      <main className="flex-1 min-w-0 flex flex-col">
+        <header className="border-b px-3 py-3 sm:px-4 sm:py-4 flex items-center gap-2 sm:gap-3">
           <Button
             variant="ghost"
             size="icon"
-            className="hidden md:inline-flex"
+            className="inline-flex"
             onClick={() => setShowServers((prev) => !prev)}
             aria-label={showServers ? "Hide MCP server panel" : "Show MCP server panel"}
           >
@@ -421,8 +421,8 @@ export function ChatContainer() {
             <h1 className="text-lg font-semibold">Chat</h1>
             
           </div>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 pl-4 border-l">
+          <div className="flex items-center gap-2 sm:gap-4">
+            <div className="flex items-center gap-2 sm:pl-4 sm:border-l">
               <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
                 <span className="text-xs font-medium text-primary">{MOCK_USER.avatarInitials}</span>
               </div>
@@ -434,8 +434,14 @@ export function ChatContainer() {
           </div>
         </header>
 
-        <ScrollArea className="flex-1 p-6" ref={scrollRef}>
-          <div className="max-w-5xl mx-auto space-y-6">
+        {showServers && (
+          <section className="border-b p-3 md:hidden max-h-[42vh] overflow-y-auto">
+            <ServerPanel sessions={sessions} onSessionsChange={setSessions} />
+          </section>
+        )}
+
+        <ScrollArea className="flex-1 overflow-x-hidden px-3 py-4 sm:p-6" ref={scrollRef}>
+          <div className="max-w-5xl mx-auto space-y-4 sm:space-y-6">
             {state.messages.length === 0 ? (
               <div className="text-center py-12">
                 <p className="text-muted-foreground">
@@ -457,8 +463,8 @@ export function ChatContainer() {
           </div>
         </ScrollArea>
 
-        <footer className="border-t p-4">
-          <div className="max-w-3xl mx-auto">
+        <footer className="border-t p-3 sm:p-4">
+          <div className="max-w-3xl mx-auto w-full">
             <ChatInput
               onSend={handleSendMessage}
               disabled={state.isLoading}

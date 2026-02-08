@@ -80,11 +80,11 @@ export function MessageBubble({ message, onUIAction, onCompleteCheckout, onEcpCo
   return (
     <div
       className={cn(
-        "flex gap-3 w-full",
+        "flex gap-2 sm:gap-3 w-full",
         isUser ? "flex-row-reverse" : "flex-row"
       )}
     >
-      <Avatar className="h-8 w-8 shrink-0">
+      <Avatar className="hidden sm:flex h-8 w-8 shrink-0">
         <AvatarFallback
           className={cn(
             isUser ? "bg-primary text-primary-foreground" : "bg-muted"
@@ -97,18 +97,18 @@ export function MessageBubble({ message, onUIAction, onCompleteCheckout, onEcpCo
       <div
         className={cn(
           "flex flex-col gap-2",
-          isUser ? "items-end max-w-[80%]" : "items-start max-w-full"
+          isUser ? "items-end max-w-[88%] sm:max-w-[80%]" : "items-start max-w-full"
         )}
       >
         <Card
           className={cn(
-            "px-4 py-3",
+            "px-3 py-2.5 sm:px-4 sm:py-3",
             isUser
               ? "bg-primary text-primary-foreground"
               : "bg-muted/50 text-foreground"
           )}
         >
-          <div className="prose prose-sm dark:prose-invert max-w-none">
+          <div className="prose prose-sm dark:prose-invert max-w-none break-words">
             <ReactMarkdown>{message.content}</ReactMarkdown>
           </div>
         </Card>
@@ -144,7 +144,7 @@ export function MessageBubble({ message, onUIAction, onCompleteCheckout, onEcpCo
         )}
 
         {normalizedResource && (
-          <div className="w-full" style={{ minWidth: "600px", maxWidth: "900px" }}>
+          <div className="w-full max-w-full overflow-hidden sm:max-w-[900px]">
             {renderMode === "mcp-apps" && (
               <div className="mb-2 px-2 py-1 bg-info/10 border border-info/20 rounded text-xs text-info">
                 MCP Apps Mode: fetched via resources/read ({message.mcpAppsResourceUri})
@@ -162,7 +162,7 @@ export function MessageBubble({ message, onUIAction, onCompleteCheckout, onEcpCo
                 autoResizeIframe: { width: false, height: true },
                 style: {
                   width: "100%",
-                  minHeight: "400px",
+                  minHeight: "320px",
                   border: "none",
                   display: "block",
                 },

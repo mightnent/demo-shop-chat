@@ -82,7 +82,7 @@ export function CheckoutCard({ checkout, onCompleteCheckout, onEcpComplete }: Ch
   return (
     <Card className="w-full max-w-lg overflow-hidden">
       {/* Header */}
-      <div className="px-5 pt-4 pb-3 flex items-center justify-between">
+      <div className="px-4 sm:px-5 pt-4 pb-3 flex items-center justify-between gap-2">
         <div className="text-sm font-semibold text-foreground truncate">
           Checkout {checkout.id}
         </div>
@@ -93,7 +93,7 @@ export function CheckoutCard({ checkout, onCompleteCheckout, onEcpComplete }: Ch
       </div>
 
       {/* Line Items */}
-      <div className="px-5 pb-3 space-y-1.5">
+      <div className="px-4 sm:px-5 pb-3 space-y-1.5">
         <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
           Items
         </div>
@@ -118,7 +118,7 @@ export function CheckoutCard({ checkout, onCompleteCheckout, onEcpComplete }: Ch
       </div>
 
       {/* Totals */}
-      <div className="px-5 pb-3 border-t pt-3 space-y-1">
+      <div className="px-4 sm:px-5 pb-3 border-t pt-3 space-y-1">
         {checkout.totals.map((t, i) => {
           const isTotal = t.type === "total";
           return (
@@ -142,7 +142,7 @@ export function CheckoutCard({ checkout, onCompleteCheckout, onEcpComplete }: Ch
 
       {/* Buyer Info */}
       {checkout.buyer?.email && (
-        <div className="px-5 pb-3 border-t pt-3">
+        <div className="px-4 sm:px-5 pb-3 border-t pt-3">
           <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">
             Buyer
           </div>
@@ -157,7 +157,7 @@ export function CheckoutCard({ checkout, onCompleteCheckout, onEcpComplete }: Ch
 
       {/* Messages */}
       {checkout.messages && checkout.messages.length > 0 && (
-        <div className="px-5 pb-3 space-y-1.5">
+        <div className="px-4 sm:px-5 pb-3 space-y-1.5">
           {checkout.messages.map((msg, i) => {
             const msgVariant = msg.type === "error" ? "destructive" : msg.type === "warning" ? "warning" : "info";
             const bgClass = msg.type === "error" ? "bg-destructive/10" : msg.type === "warning" ? "bg-warning/10" : "bg-info/10";
@@ -181,7 +181,7 @@ export function CheckoutCard({ checkout, onCompleteCheckout, onEcpComplete }: Ch
 
       {/* Order Confirmation */}
       {checkout.order && (
-        <div className="px-5 py-3 bg-success/10 border-t border-success/20">
+        <div className="px-4 sm:px-5 py-3 bg-success/10 border-t border-success/20">
           <div className="text-sm font-semibold text-success">
             Order #{checkout.order.id} confirmed
           </div>
@@ -200,7 +200,7 @@ export function CheckoutCard({ checkout, onCompleteCheckout, onEcpComplete }: Ch
 
       {/* Pay Now Button - shown when ready_for_complete and no embedded checkout */}
       {checkout.status === "ready_for_complete" && onCompleteCheckout && !hasEmbedded && (
-        <div className="px-5 py-3 border-t bg-info/5">
+        <div className="px-4 sm:px-5 py-3 border-t bg-info/5">
           <Button
             onClick={handlePayNow}
             disabled={isProcessing}
@@ -229,7 +229,7 @@ export function CheckoutCard({ checkout, onCompleteCheckout, onEcpComplete }: Ch
         checkout.status !== "completed" &&
         checkout.status !== "canceled" &&
         (checkout.status === "requires_escalation" || !onCompleteCheckout) && (
-          <div className="px-5 py-2 border-t">
+          <div className="px-4 sm:px-5 py-2 border-t">
             <a
               href={checkout.continue_url}
               target="_blank"
