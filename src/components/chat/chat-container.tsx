@@ -11,7 +11,7 @@ import { mcpClient, MCPSession, MCPTool } from "@/lib/mcp-client";
 import { renderModeStore, RenderMode } from "@/lib/render-mode-store";
 import { UIActionResult } from "@mcp-ui/client";
 import { PanelLeftOpen, PanelRightClose, ToggleLeft, ToggleRight } from "lucide-react";
-import { MOCK_USER, getMockBuyerInfo, IS_DEMO_MODE } from "@/lib/mock-user";
+import { getMockBuyerInfo, IS_DEMO_MODE } from "@/lib/mock-user";
 import { useAuth } from "@/components/auth/auth-provider";
 import { UserMenu } from "@/components/auth/user-menu";
 import { LoginDialog } from "@/components/auth/login-dialog";
@@ -237,7 +237,8 @@ export function ChatContainer() {
   const [renderMode, setRenderMode] = useState<RenderMode>(renderModeStore.getMode());
   const [dbSessionId, setDbSessionId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const { user, isAuthenticated, isLoading } = useAuth();
+  const { isAdmin, isAuthenticated, isLoading } = useAuth();
+  const canManageMcpServers = isAdmin;
   const isAuthEnabled = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true";
 
   // Create a DB session on mount (auth mode only)
@@ -561,7 +562,7 @@ export function ChatContainer() {
 
   return (
     <div className="flex h-dvh min-h-0 bg-background">
-      {showServers && (
+      {canManageMcpServers && showServers && (
         <aside className="w-72 border-r p-4 hidden md:flex md:flex-col">
           <ServerPanel sessions={sessions} onSessionsChange={setSessions} />
 
@@ -590,19 +591,21 @@ export function ChatContainer() {
 
       <main className="flex-1 min-w-0 flex flex-col">
         <header className="border-b px-3 py-3 sm:px-4 sm:py-4 flex items-center gap-2 sm:gap-3">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="inline-flex"
-            onClick={() => setShowServers((prev) => !prev)}
-            aria-label={showServers ? "Hide MCP server panel" : "Show MCP server panel"}
-          >
-            {showServers ? (
-              <PanelRightClose className="h-5 w-5" />
-            ) : (
-              <PanelLeftOpen className="h-5 w-5" />
-            )}
-          </Button>
+          {canManageMcpServers && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="inline-flex"
+              onClick={() => setShowServers((prev) => !prev)}
+              aria-label={showServers ? "Hide MCP server panel" : "Show MCP server panel"}
+            >
+              {showServers ? (
+                <PanelRightClose className="h-5 w-5" />
+              ) : (
+                <PanelLeftOpen className="h-5 w-5" />
+              )}
+            </Button>
+          )}
           <div className="flex-1">
             <h1 className="text-lg font-semibold">Chat</h1>
 
@@ -610,7 +613,7 @@ export function ChatContainer() {
           <UserMenu />
         </header>
 
-        {showServers && (
+        {canManageMcpServers && showServers && (
           <section className="border-b p-3 md:hidden max-h-[42vh] overflow-y-auto">
             <ServerPanel sessions={sessions} onSessionsChange={setSessions} />
           </section>
