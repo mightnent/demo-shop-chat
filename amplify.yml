@@ -4,6 +4,7 @@ frontend:
     preBuild:
       commands:
         - echo "NEXT_PUBLIC_OPENAI_API_KEY=$NEXT_PUBLIC_OPENAI_API_KEY" >> .env.production
+        - echo "NEXT_PUBLIC_OPENAI_MODEL=$NEXT_PUBLIC_OPENAI_MODEL" >> .env.production
         - npm ci --cache .npm --prefer-offline
     build:
       commands:

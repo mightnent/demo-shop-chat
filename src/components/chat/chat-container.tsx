@@ -27,6 +27,25 @@ const clientOpenai = IS_DEMO_MODE
     })
   : null;
 
+const DEFAULT_MODEL = process.env.NEXT_PUBLIC_OPENAI_MODEL || "gpt-5.2";
+
+type LLMToolCall = {
+  id: string;
+  type: "function";
+  function: {
+    name: string;
+    arguments: string;
+  };
+};
+
+type LLMResponse = {
+  model: string;
+  assistantMessage: {
+    content: string;
+    toolCalls: LLMToolCall[];
+  };
+};
+
 const UCP_SYSTEM_PROMPT = `You are a helpful agentic commerce copilot using MCP-UI. Keep responses concise, friendly, and action-oriented.
 
 You can:
@@ -90,18 +109,91 @@ function injectUcpMeta(toolName: string, args: Record<string, unknown>): Record<
   return { ...args, meta };
 }
 
+function messageContentToText(
+  content: OpenAI.Chat.Completions.ChatCompletionMessageParam["content"]
+): string {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+
+  return content
+    .map((part) => {
+      if ("text" in part && typeof part.text === "string") {
+        return part.text;
+      }
+      return "";
+    })
+    .join("\n")
+    .trim();
+}
+
+function normalizeRole(
+  role: OpenAI.Chat.Completions.ChatCompletionMessageParam["role"]
+): OpenAI.Responses.EasyInputMessage["role"] {
+  if (role === "user" || role === "assistant" || role === "system" || role === "developer") {
+    return role;
+  }
+  return "user";
+}
+
+function toResponsesInput(
+  messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[]
+): OpenAI.Responses.ResponseInput {
+  return messages.map((msg) => ({
+    role: normalizeRole(msg.role),
+    content: messageContentToText(msg.content),
+  }));
+}
+
+function toResponsesTools(
+  tools?: OpenAI.Chat.Completions.ChatCompletionTool[]
+): OpenAI.Responses.Tool[] | undefined {
+  if (!tools?.length) return undefined;
+
+  return tools.map((tool) => ({
+    type: "function",
+    name: tool.function.name,
+    description: tool.function.description,
+    parameters: (tool.function.parameters as Record<string, unknown>) || {},
+    strict: false,
+  }));
+}
+
+function normalizeResponse(response: OpenAI.Responses.Response): LLMResponse {
+  const toolCalls: LLMToolCall[] = response.output
+    .filter(
+      (item): item is OpenAI.Responses.ResponseFunctionToolCall => item.type === "function_call"
+    )
+    .map((item) => ({
+      id: item.id || item.call_id,
+      type: "function",
+      function: {
+        name: item.name,
+        arguments: item.arguments || "{}",
+      },
+    }));
+
+  return {
+    model: response.model,
+    assistantMessage: {
+      content: response.output_text || "",
+      toolCalls,
+    },
+  };
+}
+
 /** Call OpenAI — server-side when auth is enabled, client-side in demo mode */
 async function callOpenAI(params: {
   messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[];
   tools?: OpenAI.Chat.Completions.ChatCompletionTool[];
-}): Promise<OpenAI.Chat.Completions.ChatCompletion> {
+}): Promise<LLMResponse> {
   if (IS_DEMO_MODE && clientOpenai) {
-    return clientOpenai.chat.completions.create({
-      model: "gpt-4o",
-      messages: params.messages,
-      tools: params.tools?.length ? params.tools : undefined,
+    const response = await clientOpenai.responses.create({
+      model: DEFAULT_MODEL,
+      input: toResponsesInput(params.messages),
+      tools: toResponsesTools(params.tools),
       tool_choice: params.tools?.length ? "auto" : undefined,
     });
+    return normalizeResponse(response);
   }
 
   // Server-side proxy
@@ -111,6 +203,7 @@ async function callOpenAI(params: {
     body: JSON.stringify({
       messages: params.messages,
       tools: params.tools,
+      model: DEFAULT_MODEL,
     }),
   });
 
@@ -119,7 +212,7 @@ async function callOpenAI(params: {
     throw new Error(err.error || `Chat request failed (${res.status})`);
   }
 
-  return res.json();
+  return res.json() as Promise<LLMResponse>;
 }
 
 /** Shadow-persist a message to the DB (non-blocking) */
@@ -367,11 +460,11 @@ export function ChatContainer() {
         tools: openAITools.length > 0 ? openAITools : undefined,
       });
 
-      const choice = response.choices[0];
-      const assistantMessage = choice.message;
+      const assistantMessage = response.assistantMessage;
+      const modelUsed = response.model;
 
-      if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
-        for (const toolCall of assistantMessage.tool_calls) {
+      if (assistantMessage.toolCalls.length > 0) {
+        for (const toolCall of assistantMessage.toolCalls) {
           const toolName = toolCall.function.name;
           let toolArgs = JSON.parse(toolCall.function.arguments || "{}");
 
@@ -406,7 +499,7 @@ export function ChatContainer() {
                 ucpCheckout: checkoutData || undefined,
                 serverUrl: match.serverUrl,
               });
-              shadowPersistMessage(dbSessionId, "assistant", textSummary, "gpt-4o");
+              shadowPersistMessage(dbSessionId, "assistant", textSummary, modelUsed);
             } else {
               // Existing vendor tool handling
               const uiResource = result.content.find(
@@ -427,7 +520,7 @@ export function ChatContainer() {
                 mcpAppsResourceUri: result._meta?.ui?.resourceUri,
                 serverUrl: match.serverUrl,
               });
-              shadowPersistMessage(dbSessionId, "assistant", msgContent, "gpt-4o");
+              shadowPersistMessage(dbSessionId, "assistant", msgContent, modelUsed);
             }
           }
         }
@@ -436,7 +529,7 @@ export function ChatContainer() {
           role: "assistant",
           content: assistantMessage.content,
         });
-        shadowPersistMessage(dbSessionId, "assistant", assistantMessage.content, "gpt-4o");
+        shadowPersistMessage(dbSessionId, "assistant", assistantMessage.content, modelUsed);
       }
     } catch (error) {
       chatStore.addMessage({

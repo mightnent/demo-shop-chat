@@ -40,6 +40,8 @@ Create a `.env` file:
 
 ```bash
 NEXT_PUBLIC_OPENAI_API_KEY=your-openai-api-key
+NEXT_PUBLIC_OPENAI_MODEL=gpt-5.2
+OPENAI_MODEL=gpt-5.2
 NEXT_PUBLIC_AUTH_ENABLED=true
 
 # Cognito settings
