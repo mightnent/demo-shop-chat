@@ -10,16 +10,22 @@ import { chatStore, Message, ChatState } from "@/lib/chat-store";
 import { mcpClient, MCPSession, MCPTool } from "@/lib/mcp-client";
 import { renderModeStore, RenderMode } from "@/lib/render-mode-store";
 import { UIActionResult } from "@mcp-ui/client";
-import { PanelLeftOpen, PanelRightClose, ToggleLeft, ToggleRight, User } from "lucide-react";
-import { MOCK_USER, getMockBuyerInfo } from "@/lib/mock-user";
+import { PanelLeftOpen, PanelRightClose, ToggleLeft, ToggleRight } from "lucide-react";
+import { MOCK_USER, getMockBuyerInfo, IS_DEMO_MODE } from "@/lib/mock-user";
+import { useAuth } from "@/components/auth/auth-provider";
+import { UserMenu } from "@/components/auth/user-menu";
+import { LoginDialog } from "@/components/auth/login-dialog";
 import Link from "next/link";
 import OpenAI from "openai";
 import { formatPrice, isUcpCheckoutTool, parseUcpCheckoutResponse, UcpCheckoutData } from "@/lib/ucp-utils";
 
-const openai = new OpenAI({
-  apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY || "",
-  dangerouslyAllowBrowser: true,
-});
+// Client-side OpenAI instance for demo mode only
+const clientOpenai = IS_DEMO_MODE
+  ? new OpenAI({
+      apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY || "",
+      dangerouslyAllowBrowser: true,
+    })
+  : null;
 
 const UCP_SYSTEM_PROMPT = `You are a helpful agentic commerce copilot using MCP-UI. Keep responses concise, friendly, and action-oriented.
 
@@ -84,12 +90,77 @@ function injectUcpMeta(toolName: string, args: Record<string, unknown>): Record<
   return { ...args, meta };
 }
 
+/** Call OpenAI — server-side when auth is enabled, client-side in demo mode */
+async function callOpenAI(params: {
+  messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[];
+  tools?: OpenAI.Chat.Completions.ChatCompletionTool[];
+}): Promise<OpenAI.Chat.Completions.ChatCompletion> {
+  if (IS_DEMO_MODE && clientOpenai) {
+    return clientOpenai.chat.completions.create({
+      model: "gpt-4o",
+      messages: params.messages,
+      tools: params.tools?.length ? params.tools : undefined,
+      tool_choice: params.tools?.length ? "auto" : undefined,
+    });
+  }
+
+  // Server-side proxy
+  const res = await fetch("/api/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      messages: params.messages,
+      tools: params.tools,
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Chat request failed (${res.status})`);
+  }
+
+  return res.json();
+}
+
+/** Shadow-persist a message to the DB (non-blocking) */
+function shadowPersistMessage(
+  sessionId: string | null,
+  role: string,
+  content: string,
+  modelName?: string
+) {
+  if (IS_DEMO_MODE || !sessionId) return;
+  fetch("/api/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sessionId, role, content, modelName }),
+  }).catch(() => {});
+}
+
 export function ChatContainer() {
   const [state, setState] = useState<ChatState>(chatStore.getState());
   const [sessions, setSessions] = useState<MCPSession[]>([]);
   const [showServers, setShowServers] = useState(true);
   const [renderMode, setRenderMode] = useState<RenderMode>(renderModeStore.getMode());
+  const [dbSessionId, setDbSessionId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const { user, isAuthenticated, isLoading } = useAuth();
+  const isAuthEnabled = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true";
+
+  // Create a DB session on mount (auth mode only)
+  useEffect(() => {
+    if (IS_DEMO_MODE || !isAuthenticated) return;
+    fetch("/api/sessions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.session?.id) setDbSessionId(data.session.id);
+      })
+      .catch(() => {});
+  }, [isAuthenticated]);
 
   useEffect(() => {
     const unsubscribe = chatStore.subscribe(() => {
@@ -172,11 +243,10 @@ export function ChatContainer() {
         ucpCheckout: checkoutData || undefined,
         serverUrl: match.serverUrl,
       });
+      shadowPersistMessage(dbSessionId, "assistant", messageContent);
     } catch (error) {
-      chatStore.addMessage({
-        role: "assistant",
-        content: `Error completing checkout: ${error instanceof Error ? error.message : "Unknown error"}`,
-      });
+      const errMsg = `Error completing checkout: ${error instanceof Error ? error.message : "Unknown error"}`;
+      chatStore.addMessage({ role: "assistant", content: errMsg });
     } finally {
       chatStore.setLoading(false);
     }
@@ -197,6 +267,7 @@ export function ChatContainer() {
       ucpCheckout: checkout,
       serverUrl,
     });
+    shadowPersistMessage(dbSessionId, "assistant", messageContent);
   };
 
   const handleUIAction = async (action: UIActionResult) => {
@@ -225,26 +296,29 @@ export function ChatContainer() {
 
           if (isUcpCheckoutTool(actionToolName)) {
             const checkoutData = parseUcpCheckoutResponse(result);
+            const content = checkoutData
+              ? `Checkout ${checkoutData.id} - Status: ${checkoutData.status}`
+              : (getToolText(result) || `Tool ${actionToolName} executed.`);
             chatStore.addMessage({
               role: "assistant",
-              content: checkoutData
-                ? `Checkout ${checkoutData.id} - Status: ${checkoutData.status}`
-                : (getToolText(result) || `Tool ${actionToolName} executed.`),
+              content,
               ucpCheckout: checkoutData || undefined,
               serverUrl: match.serverUrl,
             });
+            shadowPersistMessage(dbSessionId, "assistant", content);
           } else {
             const uiResource = result.content.find(
               (c) => c.type === "resource" && c.resource?.uri?.startsWith("ui://")
             );
-
+            const content = `Tool ${actionToolName} executed.`;
             chatStore.addMessage({
               role: "assistant",
-              content: `Tool ${actionToolName} executed.`,
+              content,
               uiResource: uiResource?.resource,
               mcpAppsResourceUri: result._meta?.ui?.resourceUri,
               serverUrl: match.serverUrl,
             });
+            shadowPersistMessage(dbSessionId, "assistant", content);
           }
         } catch (error) {
           chatStore.addMessage({
@@ -262,6 +336,7 @@ export function ChatContainer() {
 
   const handleSendMessage = async (content: string) => {
     chatStore.addMessage({ role: "user", content });
+    shadowPersistMessage(dbSessionId, "user", content);
     chatStore.setLoading(true);
 
     try {
@@ -287,11 +362,9 @@ export function ChatContainer() {
         { role: "user", content },
       ];
 
-      const response = await openai.chat.completions.create({
-        model: "gpt-4o",
+      const response = await callOpenAI({
         messages,
         tools: openAITools.length > 0 ? openAITools : undefined,
-        tool_choice: openAITools.length > 0 ? "auto" : undefined,
       });
 
       const choice = response.choices[0];
@@ -333,6 +406,7 @@ export function ChatContainer() {
                 ucpCheckout: checkoutData || undefined,
                 serverUrl: match.serverUrl,
               });
+              shadowPersistMessage(dbSessionId, "assistant", textSummary, "gpt-4o");
             } else {
               // Existing vendor tool handling
               const uiResource = result.content.find(
@@ -345,13 +419,15 @@ export function ChatContainer() {
                 .map((c) => c.text)
                 .join("\n");
 
+              const msgContent = textContent || "Tool executed successfully.";
               chatStore.addMessage({
                 role: "assistant",
-                content: textContent || "Tool executed successfully.",
+                content: msgContent,
                 uiResource: uiResource?.resource,
                 mcpAppsResourceUri: result._meta?.ui?.resourceUri,
                 serverUrl: match.serverUrl,
               });
+              shadowPersistMessage(dbSessionId, "assistant", msgContent, "gpt-4o");
             }
           }
         }
@@ -360,6 +436,7 @@ export function ChatContainer() {
           role: "assistant",
           content: assistantMessage.content,
         });
+        shadowPersistMessage(dbSessionId, "assistant", assistantMessage.content, "gpt-4o");
       }
     } catch (error) {
       chatStore.addMessage({
@@ -372,6 +449,22 @@ export function ChatContainer() {
       chatStore.setLoading(false);
     }
   };
+
+  if (isAuthEnabled && isLoading) {
+    return (
+      <div className="flex h-dvh items-center justify-center bg-background">
+        <p className="text-sm text-muted-foreground">Checking session...</p>
+      </div>
+    );
+  }
+
+  if (isAuthEnabled && !isAuthenticated) {
+    return (
+      <div className="flex h-dvh items-center justify-center bg-background p-6">
+        <LoginDialog />
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-dvh min-h-0 bg-background">
@@ -419,19 +512,9 @@ export function ChatContainer() {
           </Button>
           <div className="flex-1">
             <h1 className="text-lg font-semibold">Chat</h1>
-            
+
           </div>
-          <div className="flex items-center gap-2 sm:gap-4">
-            <div className="flex items-center gap-2 sm:pl-4 sm:border-l">
-              <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
-                <span className="text-xs font-medium text-primary">{MOCK_USER.avatarInitials}</span>
-              </div>
-              <div className="hidden sm:block">
-                <p className="text-sm font-medium">{MOCK_USER.firstName} {MOCK_USER.lastName}</p>
-                <p className="text-xs text-muted-foreground">{MOCK_USER.email}</p>
-              </div>
-            </div>
-          </div>
+          <UserMenu />
         </header>
 
         {showServers && (

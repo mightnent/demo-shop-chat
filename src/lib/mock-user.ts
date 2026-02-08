@@ -14,6 +14,11 @@ export const MOCK_USER: MockUser = {
   avatarInitials: "JD",
 };
 
+export const IS_DEMO_MODE =
+  typeof window !== "undefined"
+    ? process.env.NEXT_PUBLIC_AUTH_ENABLED !== "true"
+    : process.env.NEXT_PUBLIC_AUTH_ENABLED !== "true";
+
 export function getMockBuyerInfo() {
   return {
     email: MOCK_USER.email,

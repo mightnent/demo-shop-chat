@@ -40,7 +40,25 @@ Create a `.env` file:
 
 ```bash
 NEXT_PUBLIC_OPENAI_API_KEY=your-openai-api-key
+NEXT_PUBLIC_AUTH_ENABLED=true
+
+# Cognito settings
+COGNITO_USER_POOL_ID=your-user-pool-id
+COGNITO_APP_CLIENT_ID=your-app-client-id
+COGNITO_REGION=your-region
+COGNITO_ISSUER=https://cognito-idp.<region>.amazonaws.com/<user-pool-id>
+NEXT_PUBLIC_COGNITO_REGION=your-region
+NEXT_PUBLIC_COGNITO_APP_CLIENT_ID=your-app-client-id
+NEXT_PUBLIC_COGNITO_DOMAIN=your-cognito-domain-prefix
+
+# Comma-separated admin emails
+ADMIN_EMAILS=admin1@example.com,admin2@example.com
 ```
+
+Notes:
+- No local admin user seeding is required.
+- Users are created in the app database on first successful Cognito login.
+- A user gets `admin` role only if their email is in `ADMIN_EMAILS` or their Cognito groups include `admin`.
 
 ### Development
 
@@ -92,3 +110,22 @@ import { UIResourceRenderer } from "@mcp-ui/client";
 ```
 
 UI actions (tool calls, prompts) are handled and can trigger additional MCP tool calls.
+
+## Audit Logging Scope
+
+This project intentionally keeps audit writes minimal and only records
+`auth.token_exchange` events.
+
+The following event categories are intentionally not emitted right now:
+- chat session lifecycle events (for example `chat.session_start`)
+- chat message lifecycle events (for example `chat.message_sent`, `chat.message_received`)
+- admin page/view events
+- token refresh/logout events
+
+Rationale:
+- this app is expected to run at high chat volume
+- writing every session/message lifecycle event can create unnecessary DB growth
+- token exchange remains logged as the highest-value auth audit signal for this project stage
+
+If you re-enable broader audit logging later, do it deliberately with retention limits,
+separate storage/routing for high-volume events, and clear event namespaces.
