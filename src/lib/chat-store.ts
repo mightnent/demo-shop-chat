@@ -74,6 +74,11 @@ class ChatStore {
     this.notify();
   }
 
+  setMessages(messages: Message[]): void {
+    this.state = { ...this.state, messages };
+    this.notify();
+  }
+
   clearMessages(): void {
     this.state = { ...this.state, messages: [] };
     this.notify();

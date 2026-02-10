@@ -112,6 +112,7 @@ export const chatMessages = pgTable(
     content: text("content").notNull(),
     contentRedacted: text("content_redacted"),
     modelName: text("model_name"),
+    metadata: jsonb("metadata"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

@@ -219,13 +219,23 @@ function shadowPersistMessage(
   sessionId: string | null,
   role: string,
   content: string,
-  modelName?: string
+  modelName?: string,
+  richMeta?: {
+    uiResource?: any;
+    mcpAppsResourceUri?: string;
+    serverUrl?: string;
+    ucpCheckout?: any;
+    toolCall?: { name: string; args: Record<string, unknown>; result?: string };
+  }
 ) {
   if (IS_DEMO_MODE || !sessionId) return;
+  const metadata = richMeta && Object.keys(richMeta).some((k) => (richMeta as any)[k] != null)
+    ? richMeta
+    : undefined;
   fetch("/api/messages", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ sessionId, role, content, modelName }),
+    body: JSON.stringify({ sessionId, role, content, modelName, metadata }),
   }).catch(() => {});
 }
 
@@ -279,6 +289,32 @@ export function ChatContainer() {
   const toggleRenderMode = () => {
     const newMode = renderMode === "classic" ? "mcp-apps" : "classic";
     renderModeStore.setMode(newMode);
+  };
+
+  const handleLoadSession = async (sessionId: string) => {
+    try {
+      const res = await fetch(`/api/messages?sessionId=${sessionId}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const loaded: Message[] = (data.messages || []).map((m: any) => {
+        const meta = m.metadata || {};
+        return {
+          id: m.id,
+          role: m.role as "user" | "assistant" | "system",
+          content: m.content,
+          timestamp: new Date(m.createdAt),
+          uiResource: meta.uiResource || undefined,
+          mcpAppsResourceUri: meta.mcpAppsResourceUri || undefined,
+          serverUrl: meta.serverUrl || undefined,
+          ucpCheckout: meta.ucpCheckout || undefined,
+          toolCall: meta.toolCall || undefined,
+        };
+      });
+      chatStore.setMessages(loaded);
+      setDbSessionId(sessionId);
+    } catch {
+      // silently fail
+    }
   };
 
   const handleCompleteCheckout = async (checkoutId: string) => {
@@ -337,7 +373,10 @@ export function ChatContainer() {
         ucpCheckout: checkoutData || undefined,
         serverUrl: match.serverUrl,
       });
-      shadowPersistMessage(dbSessionId, "assistant", messageContent);
+      shadowPersistMessage(dbSessionId, "assistant", messageContent, undefined, {
+        ucpCheckout: checkoutData || undefined,
+        serverUrl: match.serverUrl,
+      });
     } catch (error) {
       const errMsg = `Error completing checkout: ${error instanceof Error ? error.message : "Unknown error"}`;
       chatStore.addMessage({ role: "assistant", content: errMsg });
@@ -361,7 +400,10 @@ export function ChatContainer() {
       ucpCheckout: checkout,
       serverUrl,
     });
-    shadowPersistMessage(dbSessionId, "assistant", messageContent);
+    shadowPersistMessage(dbSessionId, "assistant", messageContent, undefined, {
+      ucpCheckout: checkout,
+      serverUrl,
+    });
   };
 
   const handleUIAction = async (action: UIActionResult) => {
@@ -399,7 +441,10 @@ export function ChatContainer() {
               ucpCheckout: checkoutData || undefined,
               serverUrl: match.serverUrl,
             });
-            shadowPersistMessage(dbSessionId, "assistant", content);
+            shadowPersistMessage(dbSessionId, "assistant", content, undefined, {
+              ucpCheckout: checkoutData || undefined,
+              serverUrl: match.serverUrl,
+            });
           } else {
             const uiResource = result.content.find(
               (c) => c.type === "resource" && c.resource?.uri?.startsWith("ui://")
@@ -412,7 +457,11 @@ export function ChatContainer() {
               mcpAppsResourceUri: result._meta?.ui?.resourceUri,
               serverUrl: match.serverUrl,
             });
-            shadowPersistMessage(dbSessionId, "assistant", content);
+            shadowPersistMessage(dbSessionId, "assistant", content, undefined, {
+              uiResource: uiResource?.resource,
+              mcpAppsResourceUri: result._meta?.ui?.resourceUri,
+              serverUrl: match.serverUrl,
+            });
           }
         } catch (error) {
           chatStore.addMessage({
@@ -500,7 +549,10 @@ export function ChatContainer() {
                 ucpCheckout: checkoutData || undefined,
                 serverUrl: match.serverUrl,
               });
-              shadowPersistMessage(dbSessionId, "assistant", textSummary, modelUsed);
+              shadowPersistMessage(dbSessionId, "assistant", textSummary, modelUsed, {
+                ucpCheckout: checkoutData || undefined,
+                serverUrl: match.serverUrl,
+              });
             } else {
               // Existing vendor tool handling
               const uiResource = result.content.find(
@@ -521,7 +573,11 @@ export function ChatContainer() {
                 mcpAppsResourceUri: result._meta?.ui?.resourceUri,
                 serverUrl: match.serverUrl,
               });
-              shadowPersistMessage(dbSessionId, "assistant", msgContent, modelUsed);
+              shadowPersistMessage(dbSessionId, "assistant", msgContent, modelUsed, {
+                uiResource: uiResource?.resource,
+                mcpAppsResourceUri: result._meta?.ui?.resourceUri,
+                serverUrl: match.serverUrl,
+              });
             }
           }
         }
@@ -612,7 +668,22 @@ export function ChatContainer() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => { chatStore.clearMessages(); setDbSessionId(null); }}
+            onClick={() => {
+              chatStore.clearMessages();
+              setDbSessionId(null);
+              if (!IS_DEMO_MODE && isAuthenticated) {
+                fetch("/api/sessions", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({}),
+                })
+                  .then((res) => res.json())
+                  .then((data) => {
+                    if (data.session?.id) setDbSessionId(data.session.id);
+                  })
+                  .catch(() => {});
+              }
+            }}
             aria-label="New chat"
             className="h-9 w-9"
           >
@@ -672,7 +743,25 @@ export function ChatContainer() {
       <SlideOutMenu
         open={slideOutOpen}
         onClose={() => setSlideOutOpen(false)}
-        onNewChat={() => { chatStore.clearMessages(); setDbSessionId(null); }}
+        onNewChat={() => {
+          chatStore.clearMessages();
+          setDbSessionId(null);
+          // Create a fresh DB session for the new chat
+          if (!IS_DEMO_MODE && isAuthenticated) {
+            fetch("/api/sessions", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({}),
+            })
+              .then((res) => res.json())
+              .then((data) => {
+                if (data.session?.id) setDbSessionId(data.session.id);
+              })
+              .catch(() => {});
+          }
+        }}
+        onLoadSession={handleLoadSession}
+        activeSessionId={dbSessionId}
       />
     </div>
   );

@@ -41,7 +41,7 @@ export async function POST(request: Request) {
   try {
     const session = await requireAuth();
     const body = await request.json();
-    const { sessionId, role, content, modelName } = body;
+    const { sessionId, role, content, modelName, metadata } = body;
 
     if (!sessionId || !role || !content) {
       return NextResponse.json(
@@ -59,6 +59,7 @@ export async function POST(request: Request) {
         role,
         content,
         modelName: modelName || null,
+        metadata: metadata || null,
       })
       .returning();
 
