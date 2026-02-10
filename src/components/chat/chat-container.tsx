@@ -10,12 +10,11 @@ import { chatStore, Message, ChatState } from "@/lib/chat-store";
 import { mcpClient, MCPSession, MCPTool } from "@/lib/mcp-client";
 import { renderModeStore, RenderMode } from "@/lib/render-mode-store";
 import { UIActionResult } from "@mcp-ui/client";
-import { PanelLeftOpen, PanelRightClose, ToggleLeft, ToggleRight } from "lucide-react";
+import { PanelLeftOpen, PanelRightClose, ToggleLeft, ToggleRight, SquarePen, Menu } from "lucide-react";
 import { getMockBuyerInfo, IS_DEMO_MODE } from "@/lib/mock-user";
 import { useAuth } from "@/components/auth/auth-provider";
-import { UserMenu } from "@/components/auth/user-menu";
+import { SlideOutMenu } from "./slide-out-menu";
 import { LoginDialog } from "@/components/auth/login-dialog";
-import Link from "next/link";
 import OpenAI from "openai";
 import { formatPrice, isUcpCheckoutTool, parseUcpCheckoutResponse, UcpCheckoutData } from "@/lib/ucp-utils";
 
@@ -236,6 +235,7 @@ export function ChatContainer() {
   const [showServers, setShowServers] = useState(true);
   const [renderMode, setRenderMode] = useState<RenderMode>(renderModeStore.getMode());
   const [dbSessionId, setDbSessionId] = useState<string | null>(null);
+  const [slideOutOpen, setSlideOutOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { isAdmin, isAuthenticated, isLoading } = useAuth();
   const canManageMcpServers = isAdmin;
@@ -608,9 +608,25 @@ export function ChatContainer() {
           )}
           <div className="flex-1">
             <h1 className="text-lg font-semibold">Chat</h1>
-
           </div>
-          <UserMenu />
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => { chatStore.clearMessages(); setDbSessionId(null); }}
+            aria-label="New chat"
+            className="h-9 w-9"
+          >
+            <SquarePen className="h-5 w-5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setSlideOutOpen(true)}
+            aria-label="Open menu"
+            className="h-9 w-9"
+          >
+            <Menu className="h-5 w-5" />
+          </Button>
         </header>
 
         {canManageMcpServers && showServers && (
@@ -652,6 +668,12 @@ export function ChatContainer() {
           </div>
         </footer>
       </main>
+
+      <SlideOutMenu
+        open={slideOutOpen}
+        onClose={() => setSlideOutOpen(false)}
+        onNewChat={() => { chatStore.clearMessages(); setDbSessionId(null); }}
+      />
     </div>
   );
 }
