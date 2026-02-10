@@ -3,8 +3,25 @@ frontend:
   phases:
     preBuild:
       commands:
+        - echo "DATABASE_URL=$DATABASE_URL" >> .env.production
+        - echo "COGNITO_USER_POOL_ID=$COGNITO_USER_POOL_ID" >> .env.production
+        - echo "COGNITO_APP_CLIENT_ID=$COGNITO_APP_CLIENT_ID" >> .env.production
+        - echo "COGNITO_REGION=$COGNITO_REGION" >> .env.production
+        - echo "COGNITO_ISSUER=$COGNITO_ISSUER" >> .env.production
+        - echo "NEXT_PUBLIC_COGNITO_REGION=$NEXT_PUBLIC_COGNITO_REGION" >> .env.production
+        - echo "NEXT_PUBLIC_COGNITO_APP_CLIENT_ID=$NEXT_PUBLIC_COGNITO_APP_CLIENT_ID" >> .env.production
+        - echo "NEXT_PUBLIC_COGNITO_DOMAIN=$NEXT_PUBLIC_COGNITO_DOMAIN" >> .env.production
+        - echo "TOKEN_ENCRYPTION_KEY=$TOKEN_ENCRYPTION_KEY" >> .env.production
+        - echo "SESSION_COOKIE_SECRET=$SESSION_COOKIE_SECRET" >> .env.production
+        - echo "OPENAI_API_KEY=$OPENAI_API_KEY" >> .env.production
         - echo "NEXT_PUBLIC_OPENAI_API_KEY=$NEXT_PUBLIC_OPENAI_API_KEY" >> .env.production
         - echo "NEXT_PUBLIC_OPENAI_MODEL=$NEXT_PUBLIC_OPENAI_MODEL" >> .env.production
+        - echo "NEXT_PUBLIC_AUTH_ENABLED=$NEXT_PUBLIC_AUTH_ENABLED" >> .env.production
+        - echo "ADMIN_EMAILS=$ADMIN_EMAILS" >> .env.production
+        - echo "GUARDRAILS_ENABLED=$GUARDRAILS_ENABLED" >> .env.production
+        - echo "GUARDRAILS_INPUT_MODERATION=$GUARDRAILS_INPUT_MODERATION" >> .env.production
+        - echo "GUARDRAILS_OUTPUT_MODERATION=$GUARDRAILS_OUTPUT_MODERATION" >> .env.production
+        - echo "GUARDRAILS_FAIL_CLOSED=$GUARDRAILS_FAIL_CLOSED" >> .env.production
         - npm ci --cache .npm --prefer-offline
     build:
       commands:

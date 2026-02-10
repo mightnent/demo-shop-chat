@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth/session";
 import OpenAI from "openai";
+import {
+  moderateInput,
+  moderateOutput,
+  getSystemInstructions,
+  clearSystemInstructionsCache,
+} from "@/lib/guardrails";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || process.env.NEXT_PUBLIC_OPENAI_API_KEY || "",
@@ -109,18 +115,43 @@ export async function POST(request: Request) {
       );
     }
 
+    // ── Guardrail: Input Moderation ──
+    const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
+    const latestUserText = lastUserMsg ? contentToText(lastUserMsg.content) : "";
+    const inputCheck = await moderateInput(openai, latestUserText);
+    if (inputCheck.blocked) {
+      const payload: ProxyResponse = {
+        model: model || DEFAULT_MODEL,
+        assistantMessage: { content: inputCheck.refusalMessage, toolCalls: [] },
+      };
+      return NextResponse.json(payload);
+    }
+
+    // ── Guardrail: System Instructions (from editable md file) ──
+    if (process.env.NODE_ENV === "development") clearSystemInstructionsCache();
+    const systemInstructions = process.env.GUARDRAILS_ENABLED === "true"
+      ? getSystemInstructions()
+      : undefined;
+
+    const inputMessages = toResponsesInput(messages);
+
     const response = await openai.responses.create({
       model: model || DEFAULT_MODEL,
-      input: toResponsesInput(messages),
+      instructions: systemInstructions,
+      input: inputMessages,
       tools: toResponsesTools(tools),
       tool_choice: tools?.length ? (tool_choice || "auto") : undefined,
     });
 
+    // ── Guardrail: Output Moderation ──
+    const assistantText = response.output_text || "";
+    const outputCheck = await moderateOutput(openai, assistantText);
+
     const payload: ProxyResponse = {
       model: response.model,
       assistantMessage: {
-        content: response.output_text || "",
-        toolCalls: extractToolCalls(response),
+        content: outputCheck.blocked ? outputCheck.refusalMessage : assistantText,
+        toolCalls: outputCheck.blocked ? [] : extractToolCalls(response),
       },
     };
 
