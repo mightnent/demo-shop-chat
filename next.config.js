@@ -1,9 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  experimental: {
-    serverComponentsExternalPackages: ['@neondatabase/serverless'],
-  },
+  serverExternalPackages: ['@neondatabase/serverless'],
 };
 
 module.exports = nextConfig;
