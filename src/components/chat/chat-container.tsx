@@ -18,14 +18,6 @@ import { LoginDialog } from "@/components/auth/login-dialog";
 import OpenAI from "openai";
 import { formatPrice, isUcpCheckoutTool, parseUcpCheckoutResponse, UcpCheckoutData } from "@/lib/ucp-utils";
 
-// Client-side OpenAI instance for demo mode only
-const clientOpenai = IS_DEMO_MODE
-  ? new OpenAI({
-      apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY || "",
-      dangerouslyAllowBrowser: true,
-    })
-  : null;
-
 const DEFAULT_MODEL = process.env.NEXT_PUBLIC_OPENAI_MODEL || "gpt-5.2";
 
 type LLMToolCall = {
@@ -108,94 +100,11 @@ function injectUcpMeta(toolName: string, args: Record<string, unknown>): Record<
   return { ...args, meta };
 }
 
-function messageContentToText(
-  content: OpenAI.Chat.Completions.ChatCompletionMessageParam["content"]
-): string {
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return "";
-
-  return content
-    .map((part) => {
-      if ("text" in part && typeof part.text === "string") {
-        return part.text;
-      }
-      return "";
-    })
-    .join("\n")
-    .trim();
-}
-
-function normalizeRole(
-  role: OpenAI.Chat.Completions.ChatCompletionMessageParam["role"]
-): OpenAI.Responses.EasyInputMessage["role"] {
-  if (role === "user" || role === "assistant" || role === "system" || role === "developer") {
-    return role;
-  }
-  return "user";
-}
-
-function toResponsesInput(
-  messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[]
-): OpenAI.Responses.ResponseInput {
-  return messages.map((msg) => ({
-    role: normalizeRole(msg.role),
-    content: messageContentToText(msg.content),
-  }));
-}
-
-function toResponsesTools(
-  tools?: OpenAI.Chat.Completions.ChatCompletionTool[]
-): OpenAI.Responses.Tool[] | undefined {
-  if (!tools?.length) return undefined;
-
-  return tools.map((tool) => ({
-    type: "function",
-    name: tool.function.name,
-    description: tool.function.description,
-    parameters: (tool.function.parameters as Record<string, unknown>) || {},
-    strict: false,
-  }));
-}
-
-function normalizeResponse(response: OpenAI.Responses.Response): LLMResponse {
-  const toolCalls: LLMToolCall[] = response.output
-    .filter(
-      (item): item is OpenAI.Responses.ResponseFunctionToolCall => item.type === "function_call"
-    )
-    .map((item) => ({
-      id: item.id || item.call_id,
-      type: "function",
-      function: {
-        name: item.name,
-        arguments: item.arguments || "{}",
-      },
-    }));
-
-  return {
-    model: response.model,
-    assistantMessage: {
-      content: response.output_text || "",
-      toolCalls,
-    },
-  };
-}
-
-/** Call OpenAI — server-side when auth is enabled, client-side in demo mode */
+/** Call OpenAI via the server-side /api/chat proxy */
 async function callOpenAI(params: {
   messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[];
   tools?: OpenAI.Chat.Completions.ChatCompletionTool[];
 }): Promise<LLMResponse> {
-  if (IS_DEMO_MODE && clientOpenai) {
-    const response = await clientOpenai.responses.create({
-      model: DEFAULT_MODEL,
-      input: toResponsesInput(params.messages),
-      tools: toResponsesTools(params.tools),
-      tool_choice: params.tools?.length ? "auto" : undefined,
-    });
-    return normalizeResponse(response);
-  }
-
-  // Server-side proxy
   const res = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

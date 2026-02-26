@@ -92,12 +92,7 @@ OPENAI_API_KEY=sk-...
 
 # Demo mode — no database or Cognito needed
 NEXT_PUBLIC_AUTH_ENABLED=false
-
-# Client-side key used in demo mode (browser calls OpenAI directly)
-NEXT_PUBLIC_OPENAI_API_KEY=sk-...
 ```
-
-> **Important:** In demo mode, the OpenAI API key is exposed to the browser via `NEXT_PUBLIC_OPENAI_API_KEY`. This is fine for local development but should never be used in production. In production, set `NEXT_PUBLIC_AUTH_ENABLED=true` so all OpenAI calls go through the server-side proxy at `/api/chat`.
 
 **4. Start the dev server:**
 
@@ -180,8 +175,7 @@ Create a `.env.local` file in the `chat-host` directory. Here's the complete ref
 
 | Variable | Description |
 |---|---|
-| `NEXT_PUBLIC_OPENAI_API_KEY` | OpenAI API key exposed to browser. Only used when `NEXT_PUBLIC_AUTH_ENABLED=false`. |
-| `NEXT_PUBLIC_OPENAI_MODEL` | Model name for client-side calls (default: `gpt-5.2`). |
+| `NEXT_PUBLIC_OPENAI_MODEL` | Model name override (default: `gpt-5.2`). |
 
 ### Auth Toggle
 
@@ -256,8 +250,7 @@ The chat system uses OpenAI's Responses API with MCP tool calling. Here's the en
 1. **User sends a message** in the chat UI.
 2. **Message is added** to the in-memory chat store and (when auth is enabled) persisted to the database.
 3. **OpenAI is called** with the conversation history + available MCP tools:
-   - **Demo mode:** The browser calls OpenAI directly using `NEXT_PUBLIC_OPENAI_API_KEY`.
-   - **Auth mode:** The browser calls `POST /api/chat`, which proxies to OpenAI server-side. Before calling the model, the server runs **input moderation**. After receiving the response, it runs **output moderation**. System instructions from an editable markdown file are injected via the `instructions` parameter.
+   - All OpenAI calls go through `POST /api/chat` server-side. Before calling the model, the server runs **input moderation**. After receiving the response, it runs **output moderation**. System instructions from an editable markdown file are injected via the `instructions` parameter.
 4. **If the model returns tool calls:**
    - Each tool call is executed against the connected MCP server via `mcpClient.callTool()`.
    - UCP checkout tools get automatic metadata injection (profile URL, idempotency keys, mock buyer info).

@@ -14,7 +14,6 @@ frontend:
         - echo "TOKEN_ENCRYPTION_KEY=$TOKEN_ENCRYPTION_KEY" >> .env.production
         - echo "SESSION_COOKIE_SECRET=$SESSION_COOKIE_SECRET" >> .env.production
         - echo "OPENAI_API_KEY=$OPENAI_API_KEY" >> .env.production
-        - echo "NEXT_PUBLIC_OPENAI_API_KEY=$NEXT_PUBLIC_OPENAI_API_KEY" >> .env.production
         - echo "NEXT_PUBLIC_OPENAI_MODEL=$NEXT_PUBLIC_OPENAI_MODEL" >> .env.production
         - echo "NEXT_PUBLIC_AUTH_ENABLED=$NEXT_PUBLIC_AUTH_ENABLED" >> .env.production
         - echo "ADMIN_EMAILS=$ADMIN_EMAILS" >> .env.production

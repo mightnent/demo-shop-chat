@@ -9,7 +9,7 @@ import {
 } from "@/lib/guardrails";
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || process.env.NEXT_PUBLIC_OPENAI_API_KEY || "",
+  apiKey: process.env.OPENAI_API_KEY || "",
 });
 
 const DEFAULT_MODEL = process.env.OPENAI_MODEL || "gpt-5.2";
@@ -103,7 +103,10 @@ function extractToolCalls(response: OpenAI.Responses.Response): ProxyToolCall[] 
 
 export async function POST(request: Request) {
   try {
-    await requireAuth();
+    // Skip auth check in demo mode
+    if (process.env.NEXT_PUBLIC_AUTH_ENABLED === "true") {
+      await requireAuth();
+    }
 
     const body = (await request.json()) as ChatRequest;
     const { messages, tools, tool_choice, model } = body;
