@@ -364,7 +364,7 @@ The guardrails system has three implemented layers (with four more planned):
 
 **Customizing the System Prompt:**
 
-Edit `src/lib/guardrails/system-instructions.md` to change the model's behavior. The default prompt scopes the assistant to bill payment topics. In dev mode, changes take effect immediately without restarting the server.
+Edit `src/lib/guardrails/system-instructions.md` to change the model's behavior. The default prompt scopes the assistant to shopping and checkout topics. In dev mode, changes take effect immediately without restarting the server.
 
 See [`docs/guardrail-simple.md`](docs/guardrail-simple.md) for the full guardrails design including planned layers (scope gate, tool allowlist, domain allowlist, rate limiting).
 

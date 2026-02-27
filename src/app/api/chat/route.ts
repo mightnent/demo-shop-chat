@@ -13,6 +13,7 @@ const openai = new OpenAI({
 });
 
 const DEFAULT_MODEL = process.env.OPENAI_MODEL || "gpt-5.2";
+const FIRST_TURN_GREETING = "Hi—what are you shopping for today?";
 
 type ChatRequest = {
   messages?: OpenAI.Chat.Completions.ChatCompletionMessageParam[];
@@ -101,6 +102,11 @@ function extractToolCalls(response: OpenAI.Responses.Response): ProxyToolCall[] 
     }));
 }
 
+function isSimpleGreeting(text: string): boolean {
+  const normalized = text.trim().toLowerCase();
+  return /^(hi|hello|hey|yo|sup|howdy)[!.?]*$/.test(normalized);
+}
+
 export async function POST(request: Request) {
   try {
     // Skip auth check in demo mode
@@ -126,6 +132,16 @@ export async function POST(request: Request) {
       const payload: ProxyResponse = {
         model: model || DEFAULT_MODEL,
         assistantMessage: { content: inputCheck.refusalMessage, toolCalls: [] },
+      };
+      return NextResponse.json(payload);
+    }
+
+    // Keep first-turn greeting deterministic and short.
+    const userMessageCount = messages.filter((m) => m.role === "user").length;
+    if (userMessageCount === 1 && isSimpleGreeting(latestUserText)) {
+      const payload: ProxyResponse = {
+        model: model || DEFAULT_MODEL,
+        assistantMessage: { content: FIRST_TURN_GREETING, toolCalls: [] },
       };
       return NextResponse.json(payload);
     }

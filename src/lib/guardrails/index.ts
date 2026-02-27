@@ -3,7 +3,7 @@ import { readFileSync } from "fs";
 import { join } from "path";
 
 const REFUSAL_MESSAGE =
-  "I can't help with that. I can assist you with bill payments, account inquiries, and billing support.";
+  "I can't help with that. I can assist you with product discovery, comparisons, and checkout support.";
 
 let cachedSystemInstructions: string | null = null;
 
