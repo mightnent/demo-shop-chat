@@ -354,13 +354,10 @@ export function CheckoutCard({
             ) : (
               <>
                 <CreditCard className="h-4 w-4 mr-2" />
-                Pay Now (Mock)
+                Pay Now
               </>
             )}
           </Button>
-          <p className="text-[10px] text-center text-muted-foreground mt-2">
-            Demo: This simulates a payment flow
-          </p>
         </div>
       )}
 
