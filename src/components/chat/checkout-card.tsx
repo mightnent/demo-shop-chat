@@ -335,16 +335,6 @@ export function CheckoutCard({
           <div className="text-sm font-semibold text-success">
             Order #{checkout.order.id} confirmed
           </div>
-          {checkout.order.permalink_url && (
-            <a
-              href={checkout.order.permalink_url}
-              target="_blank"
-              rel="noreferrer"
-              className="text-xs text-success underline hover:text-success/80"
-            >
-              View order details
-            </a>
-          )}
         </div>
       )}
 
