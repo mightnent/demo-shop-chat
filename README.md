@@ -204,6 +204,8 @@ Create a `.env.local` file in the `chat-host` directory. Here's the complete ref
 |---|---|---|
 | `OPENAI_MODEL` | `gpt-5.2` | Model used by the server-side `/api/chat` proxy |
 | `ADMIN_EMAILS` | (none) | Comma-separated list of emails that get the `admin` role on first login |
+| `NEXT_PUBLIC_DEFAULT_MCP_SERVER_URL` | (none) | MCP server URL to always seed into the saved server list on startup |
+| `NEXT_PUBLIC_DEFAULT_MCP_SERVER_NAME` | hostname from URL | Optional display name used with `NEXT_PUBLIC_DEFAULT_MCP_SERVER_URL` |
 
 ### Guardrails
 

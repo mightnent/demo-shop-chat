@@ -19,6 +19,8 @@ interface ServerPanelProps {
 type ServerStatus = "idle" | "connecting" | "ok" | "error";
 
 const STORAGE_KEY = "mcpSavedServers";
+const DEFAULT_MCP_SERVER_URL = process.env.NEXT_PUBLIC_DEFAULT_MCP_SERVER_URL?.trim() || "";
+const DEFAULT_MCP_SERVER_NAME = process.env.NEXT_PUBLIC_DEFAULT_MCP_SERVER_NAME?.trim();
 
 export function ServerPanel({ sessions, onSessionsChange }: ServerPanelProps) {
   const [serverUrl, setServerUrl] = useState("");
@@ -40,6 +42,22 @@ export function ServerPanel({ sessions, onSessionsChange }: ServerPanelProps) {
       seen.add(server.url);
       return true;
     });
+  };
+
+  const normalizeServerUrl = (input: string) => {
+    const normalized = new URL(input.trim());
+    normalized.hash = "";
+    normalized.search = "";
+    return normalized.toString().replace(/\/$/, "");
+  };
+
+  const buildServer = (url: string, fallbackName?: string): MCPServer => {
+    const normalizedUrl = normalizeServerUrl(url);
+    const parsed = new URL(normalizedUrl);
+    return {
+      name: fallbackName?.trim() || parsed.hostname,
+      url: normalizedUrl,
+    };
   };
 
   const connectAndTrack = async (server: MCPServer) => {
@@ -71,7 +89,24 @@ export function ServerPanel({ sessions, onSessionsChange }: ServerPanelProps) {
 
     const storedRaw = localStorage.getItem(STORAGE_KEY);
     const stored: MCPServer[] = storedRaw ? JSON.parse(storedRaw) : [];
-    const initial = dedupeServers(stored);
+    const storedNormalized = stored.map((server) => {
+      try {
+        return buildServer(server.url, server.name);
+      } catch {
+        return null;
+      }
+    }).filter((server): server is MCPServer => Boolean(server));
+
+    const defaultServer: MCPServer[] = [];
+    if (DEFAULT_MCP_SERVER_URL) {
+      try {
+        defaultServer.push(buildServer(DEFAULT_MCP_SERVER_URL, DEFAULT_MCP_SERVER_NAME));
+      } catch {
+        // Invalid env URL should not block app startup.
+      }
+    }
+
+    const initial = dedupeServers([...storedNormalized, ...defaultServer]);
 
     setSavedServers(initial);
     persistServers(initial);
@@ -89,10 +124,7 @@ export function ServerPanel({ sessions, onSessionsChange }: ServerPanelProps) {
     setError(null);
 
     try {
-      const server: MCPServer = {
-        name: new URL(serverUrl).hostname,
-        url: serverUrl,
-      };
+      const server = buildServer(serverUrl);
 
       const updatedServers = dedupeServers([...savedServers, server]);
       setSavedServers(updatedServers);
