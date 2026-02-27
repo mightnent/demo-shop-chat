@@ -161,11 +161,14 @@ export function CheckoutCard({
   return (
     <Card className="w-full max-w-lg overflow-hidden">
       {/* Header */}
-      <div className="px-4 sm:px-5 pt-4 pb-3 flex items-center justify-between gap-2">
-        <div className="text-sm font-semibold text-foreground truncate">
+      <div className="px-4 sm:px-5 pt-4 pb-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        <div className="text-sm font-semibold text-foreground break-words sm:truncate min-w-0">
           Checkout {checkout.id}
         </div>
-        <Badge variant={statusCfg.variant} className="gap-1.5">
+        <Badge
+          variant={statusCfg.variant}
+          className="gap-1.5 self-start sm:self-auto max-w-full whitespace-normal text-left"
+        >
           {statusCfg.icon}
           {statusCfg.label}
         </Badge>
@@ -179,15 +182,15 @@ export function CheckoutCard({
         {checkout.line_items.map((li) => (
           <div
             key={li.id}
-            className="flex justify-between items-center text-sm"
+            className="flex justify-between items-start gap-3 text-sm"
           >
-            <span className="text-foreground">
+            <span className="text-foreground min-w-0 break-words">
               {li.item.title || li.item.id}{" "}
               {li.quantity > 1 && (
                 <span className="text-muted-foreground">x{li.quantity}</span>
               )}
             </span>
-            <span className="font-medium text-foreground">
+            <span className="font-medium text-foreground shrink-0">
               {li.item.price != null
                 ? formatPrice(li.item.price * li.quantity, checkout.currency)
                 : "--"}
