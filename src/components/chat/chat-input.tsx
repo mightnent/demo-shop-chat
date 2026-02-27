@@ -71,8 +71,7 @@ export function ChatInput({
           disabled={disabled}
           rows={1}
           className={cn(
-            "w-full resize-none border-0 bg-transparent text-sm leading-6",
-            "sm:text-base",
+            "w-full resize-none border-0 bg-transparent text-base leading-6",
             "placeholder:text-muted-foreground",
             "focus:outline-none",
             "disabled:cursor-not-allowed disabled:opacity-50",
