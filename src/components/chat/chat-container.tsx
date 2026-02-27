@@ -33,6 +33,9 @@ import { SlideOutMenu } from "./slide-out-menu";
 
 const DEFAULT_MODEL = process.env.NEXT_PUBLIC_OPENAI_MODEL || "gpt-5.2";
 const MOCK_WALLET_STORAGE_KEY = "chat_host_mock_wallet_enabled";
+const MCP_SERVERS_STORAGE_KEY = "mcpSavedServers";
+const DEFAULT_MCP_SERVER_URL = process.env.NEXT_PUBLIC_DEFAULT_MCP_SERVER_URL?.trim() || "";
+const DEFAULT_MCP_SERVER_NAME = process.env.NEXT_PUBLIC_DEFAULT_MCP_SERVER_NAME?.trim();
 
 type LLMToolCall = {
   id: string;
@@ -54,8 +57,14 @@ type LLMResponse = {
 const UCP_SYSTEM_PROMPT = `You are a helpful agentic commerce copilot using MCP-UI. Keep responses concise, friendly, and action-oriented.
 
 You can:
-- Discover products with vendor tools (list_products, get_product, recommend_products).
+- Discover products with vendor tools (recommend_products, get_product).
 - Manage checkout via UCP tools (create_checkout, get_checkout, update_checkout, complete_checkout, cancel_checkout).
+
+Tool use policy:
+- When the user expresses shopping intent (for example: "coffee", "latte", "matcha latte", "tea", "show options"), call discovery tools first instead of asking broad clarification questions.
+- Always call recommend_products first for discovery and pass the user's exact term in keyword.
+- Ask a short follow-up only after returning concrete product options from tools, or if tools return no matches.
+- Do not answer with general product knowledge when discovery tools are available.
 
 Checkout flow:
 1) Help the user browse and decide what to buy.
@@ -221,7 +230,7 @@ function shadowPersistMessage(
 export function ChatContainer() {
   const [state, setState] = useState<ChatState>(chatStore.getState());
   const [sessions, setSessions] = useState<MCPSession[]>([]);
-  const [showServers, setShowServers] = useState(true);
+  const [showServers, setShowServers] = useState(false);
   const [renderMode, setRenderMode] = useState<RenderMode>(renderModeStore.getMode());
   const [dbSessionId, setDbSessionId] = useState<string | null>(null);
   const [slideOutOpen, setSlideOutOpen] = useState(false);
@@ -230,6 +239,31 @@ export function ChatContainer() {
   const { isAdmin, isAuthenticated, isLoading } = useAuth();
   const canManageMcpServers = isAdmin;
   const isAuthEnabled = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true";
+
+  const normalizeServerUrl = (input: string) => {
+    const normalized = new URL(input.trim());
+    normalized.hash = "";
+    normalized.search = "";
+    return normalized.toString().replace(/\/$/, "");
+  };
+
+  const buildServer = (url: string, fallbackName?: string) => {
+    const normalizedUrl = normalizeServerUrl(url);
+    const parsed = new URL(normalizedUrl);
+    return {
+      name: fallbackName?.trim() || parsed.hostname,
+      url: normalizedUrl,
+    };
+  };
+
+  const dedupeServers = (servers: Array<{ name: string; url: string }>) => {
+    const seen = new Set<string>();
+    return servers.filter((server) => {
+      if (seen.has(server.url)) return false;
+      seen.add(server.url);
+      return true;
+    });
+  };
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -243,6 +277,56 @@ export function ChatContainer() {
     if (typeof window === "undefined") return;
     window.localStorage.setItem(MOCK_WALLET_STORAGE_KEY, String(mockWalletEnabled));
   }, [mockWalletEnabled]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const storedRaw = window.localStorage.getItem(MCP_SERVERS_STORAGE_KEY);
+    const storedServers: Array<{ name?: string; url: string }> = storedRaw ? JSON.parse(storedRaw) : [];
+
+    const normalizedStored = storedServers
+      .map((server) => {
+        try {
+          return buildServer(server.url, server.name);
+        } catch {
+          return null;
+        }
+      })
+      .filter((server): server is { name: string; url: string } => Boolean(server));
+
+    const defaults: Array<{ name: string; url: string }> = [];
+    if (DEFAULT_MCP_SERVER_URL) {
+      try {
+        defaults.push(buildServer(DEFAULT_MCP_SERVER_URL, DEFAULT_MCP_SERVER_NAME));
+      } catch {
+        // Ignore invalid env URL.
+      }
+    }
+
+    const initialServers = dedupeServers([...normalizedStored, ...defaults]);
+    if (!initialServers.length) return;
+
+    let cancelled = false;
+
+    (async () => {
+      const connected = await Promise.all(
+        initialServers.map(async (server) => {
+          try {
+            return await mcpClient.connect(server);
+          } catch {
+            return null;
+          }
+        })
+      );
+
+      if (cancelled) return;
+      setSessions(connected.filter((session): session is MCPSession => Boolean(session)));
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (IS_DEMO_MODE || !isAuthenticated) return;
@@ -527,14 +611,16 @@ export function ChatContainer() {
       const tools = mcpClient.getAllTools();
       const toolsWithServer = mcpClient.getToolsWithServer();
 
-      const openAITools: OpenAI.Chat.Completions.ChatCompletionTool[] = tools.map((tool) => ({
-        type: "function" as const,
-        function: {
-          name: tool.name,
-          description: tool.description,
-          parameters: tool.inputSchema as Record<string, unknown>,
-        },
-      }));
+      const openAITools: OpenAI.Chat.Completions.ChatCompletionTool[] = tools
+        .filter((tool) => tool.name !== "list_products")
+        .map((tool) => ({
+          type: "function" as const,
+          function: {
+            name: tool.name,
+            description: tool.description,
+            parameters: tool.inputSchema as Record<string, unknown>,
+          },
+        }));
 
       const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
         { role: "system", content: UCP_SYSTEM_PROMPT },

@@ -79,6 +79,11 @@ export function CheckoutCard({
   onEcpComplete,
   mockWalletEnabled = true,
 }: CheckoutCardProps) {
+  const formatCardNumber = (value: string) => {
+    const digits = value.replace(/\D/g, "").slice(0, 19);
+    return digits.replace(/(.{4})/g, "$1 ").trim();
+  };
+
   const statusCfg = STATUS_CONFIG[checkout.status] || STATUS_CONFIG.incomplete;
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSubmittingCard, setIsSubmittingCard] = useState(false);
@@ -111,7 +116,7 @@ export function CheckoutCard({
     if (!onSubmitPaymentCredential) return;
     setCardError(null);
 
-    const cardDigits = cardNumber.replace(/\s+/g, "");
+    const cardDigits = cardNumber.replace(/\D/g, "");
     const month = expiryMonth.trim();
     const year = expiryYear.trim();
     const cvv = cvc.trim();
@@ -269,10 +274,11 @@ export function CheckoutCard({
             />
             <Input
               value={cardNumber}
-              onChange={(e) => setCardNumber(e.target.value)}
+              onChange={(e) => setCardNumber(formatCardNumber(e.target.value))}
               placeholder="Card number"
               inputMode="numeric"
               autoComplete="cc-number"
+              maxLength={23}
             />
             <div className="grid grid-cols-2 gap-2">
               <Input
