@@ -106,6 +106,14 @@ function buildMockPaymentPayload(checkoutId?: string) {
   };
 }
 
+function detectCardBrand(cardNumber: string): string {
+  if (/^4\d+/.test(cardNumber)) return "visa";
+  if (/^5[1-5]\d+/.test(cardNumber)) return "mastercard";
+  if (/^3[47]\d+/.test(cardNumber)) return "amex";
+  if (/^6(?:011|5\d{2})\d+/.test(cardNumber)) return "discover";
+  return "card";
+}
+
 function injectUcpMeta(
   toolName: string,
   args: Record<string, unknown>,
@@ -366,6 +374,90 @@ export function ChatContainer() {
     });
   };
 
+  const handleSubmitPaymentCredential = async (
+    checkoutId: string,
+    payload: {
+      cardNumber: string;
+      expiryMonth: string;
+      expiryYear: string;
+      cvc: string;
+      cardholderName?: string;
+    }
+  ) => {
+    const toolsWithServer = mcpClient.getToolsWithServer();
+    const match = toolsWithServer.find((t) => t.tool.name === "update_checkout");
+    if (!match) {
+      throw new Error("update_checkout tool not available");
+    }
+
+    const digits = payload.cardNumber.replace(/\D+/g, "");
+    const last4 = digits.slice(-4);
+    const brand = detectCardBrand(digits);
+    const token = `tok_manual_${checkoutId}_${Date.now()}`;
+
+    const args = injectUcpMeta(
+      "update_checkout",
+      {
+        id: checkoutId,
+        checkout: {
+          payment: {
+            instruments: [
+              {
+                id: `instr_manual_${checkoutId}`,
+                handler_id: "mock_handler_1",
+                type: "token",
+                selected: true,
+                credential: {
+                  type: "mock_token",
+                  token,
+                  brand,
+                  last4,
+                  exp_month: payload.expiryMonth,
+                  exp_year: payload.expiryYear,
+                  holder_name: payload.cardholderName,
+                },
+              },
+            ],
+          },
+          risk_signals: {
+            biometric_confirmation: {
+              approved: true,
+              method: "mock_faceid",
+              source: "chat_host_manual_card_entry",
+            },
+            biometric_confirmed: true,
+          },
+        },
+      },
+      { mockWalletEnabled: false }
+    );
+
+    const result = await mcpClient.callTool(match.serverUrl, "update_checkout", args);
+    const checkoutData = parseUcpCheckoutResponse(result);
+    const textSummary = checkoutData
+      ? `Checkout ${checkoutData.id} - Status: ${checkoutData.status}`
+      : getToolText(result) || "Payment credential saved.";
+
+    chatStore.addMessage({
+      role: "assistant",
+      content: `${textSummary}\nMock wallet enabled for this chat session.`,
+      ucpCheckout: checkoutData || undefined,
+      serverUrl: match.serverUrl,
+    });
+    shadowPersistMessage(
+      dbSessionId,
+      "assistant",
+      `${textSummary}\nMock wallet enabled for this chat session.`,
+      undefined,
+      {
+        ucpCheckout: checkoutData || undefined,
+        serverUrl: match.serverUrl,
+      }
+    );
+
+    setMockWalletEnabled(true);
+  };
+
   const handleUIAction = async (action: UIActionResult) => {
     if (action.type === "tool" && action.payload?.toolName) {
       const toolsWithServer = mcpClient.getToolsWithServer();
@@ -560,18 +652,36 @@ export function ChatContainer() {
           <ServerPanel sessions={sessions} onSessionsChange={setSessions} />
 
           <div className="mt-auto pt-4 border-t">
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-xs text-muted-foreground">
-                {renderMode === "classic" ? "Classic MCP-UI" : "MCP Apps"}
-              </span>
-              <Button variant="outline" size="sm" onClick={toggleRenderMode} className="gap-2">
-                {renderMode === "classic" ? (
-                  <ToggleLeft className="h-4 w-4" />
-                ) : (
-                  <ToggleRight className="h-4 w-4 text-primary" />
-                )}
-                {renderMode === "classic" ? "Classic" : "MCP Apps"}
-              </Button>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs text-muted-foreground">
+                  {renderMode === "classic" ? "Classic MCP-UI" : "MCP Apps"}
+                </span>
+                <Button variant="outline" size="sm" onClick={toggleRenderMode} className="gap-2">
+                  {renderMode === "classic" ? (
+                    <ToggleLeft className="h-4 w-4" />
+                  ) : (
+                    <ToggleRight className="h-4 w-4 text-primary" />
+                  )}
+                  {renderMode === "classic" ? "Classic" : "MCP Apps"}
+                </Button>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs text-muted-foreground">Mock Wallet (Dev)</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  onClick={() => setMockWalletEnabled((v) => !v)}
+                >
+                  {mockWalletEnabled ? (
+                    <ToggleRight className="h-4 w-4 text-primary" />
+                  ) : (
+                    <ToggleLeft className="h-4 w-4" />
+                  )}
+                  {mockWalletEnabled ? "On" : "Off"}
+                </Button>
+              </div>
             </div>
           </div>
         </aside>
@@ -597,14 +707,6 @@ export function ChatContainer() {
           <div className="flex-1">
             <h1 className="text-lg font-semibold">Chat</h1>
           </div>
-          <Button
-            variant={mockWalletEnabled ? "default" : "outline"}
-            size="sm"
-            className="hidden sm:inline-flex"
-            onClick={() => setMockWalletEnabled((v) => !v)}
-          >
-            {mockWalletEnabled ? "Mock Wallet On" : "Mock Wallet Off"}
-          </Button>
           <Button
             variant="ghost"
             size="icon"
@@ -659,8 +761,10 @@ export function ChatContainer() {
                   message={message}
                   onUIAction={handleUIAction}
                   onCompleteCheckout={handleCompleteCheckout}
+                  onSubmitPaymentCredential={handleSubmitPaymentCredential}
                   onEcpComplete={handleEcpComplete}
                   renderMode={renderMode}
+                  mockWalletEnabled={mockWalletEnabled}
                 />
               ))
             )}

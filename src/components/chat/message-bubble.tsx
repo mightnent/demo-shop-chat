@@ -16,8 +16,19 @@ interface MessageBubbleProps {
   message: Message;
   onUIAction?: (action: UIActionResult) => Promise<unknown>;
   onCompleteCheckout?: (checkoutId: string) => Promise<void>;
+  onSubmitPaymentCredential?: (
+    checkoutId: string,
+    payload: {
+      cardNumber: string;
+      expiryMonth: string;
+      expiryYear: string;
+      cvc: string;
+      cardholderName?: string;
+    }
+  ) => Promise<void>;
   onEcpComplete?: (checkout: Message["ucpCheckout"], serverUrl?: string) => void;
   renderMode?: RenderMode;
+  mockWalletEnabled?: boolean;
 }
 
 function normalizeResourceForRenderer(resource: any) {
@@ -31,7 +42,15 @@ function normalizeResourceForRenderer(resource: any) {
   return resource;
 }
 
-export function MessageBubble({ message, onUIAction, onCompleteCheckout, onEcpComplete, renderMode = "classic" }: MessageBubbleProps) {
+export function MessageBubble({
+  message,
+  onUIAction,
+  onCompleteCheckout,
+  onSubmitPaymentCredential,
+  onEcpComplete,
+  renderMode = "classic",
+  mockWalletEnabled = true,
+}: MessageBubbleProps) {
   const isUser = message.role === "user";
   const [mcpAppsResource, setMcpAppsResource] = useState<UIResource | null>(null);
   const [isLoadingMcpApps, setIsLoadingMcpApps] = useState(false);
@@ -138,7 +157,9 @@ export function MessageBubble({ message, onUIAction, onCompleteCheckout, onEcpCo
             <CheckoutCard
               checkout={message.ucpCheckout}
               onCompleteCheckout={onCompleteCheckout}
+              onSubmitPaymentCredential={onSubmitPaymentCredential}
               onEcpComplete={(checkout) => onEcpComplete?.(checkout, message.serverUrl)}
+              mockWalletEnabled={mockWalletEnabled}
             />
           </div>
         )}

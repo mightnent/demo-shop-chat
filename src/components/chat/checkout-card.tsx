@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import type { UcpCheckoutData } from "@/lib/ucp-utils";
 import { formatPrice } from "@/lib/ucp-utils";
 import { EcpEmbed } from "./ecp-embed";
@@ -21,7 +22,18 @@ import {
 interface CheckoutCardProps {
   checkout: UcpCheckoutData;
   onCompleteCheckout?: (checkoutId: string) => Promise<void>;
+  onSubmitPaymentCredential?: (
+    checkoutId: string,
+    payload: {
+      cardNumber: string;
+      expiryMonth: string;
+      expiryYear: string;
+      cvc: string;
+      cardholderName?: string;
+    }
+  ) => Promise<void>;
   onEcpComplete?: (checkout: UcpCheckoutData) => void;
+  mockWalletEnabled?: boolean;
 }
 
 const STATUS_CONFIG: Record<
@@ -60,11 +72,27 @@ const STATUS_CONFIG: Record<
   },
 };
 
-export function CheckoutCard({ checkout, onCompleteCheckout, onEcpComplete }: CheckoutCardProps) {
+export function CheckoutCard({
+  checkout,
+  onCompleteCheckout,
+  onSubmitPaymentCredential,
+  onEcpComplete,
+  mockWalletEnabled = true,
+}: CheckoutCardProps) {
   const statusCfg = STATUS_CONFIG[checkout.status] || STATUS_CONFIG.incomplete;
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isSubmittingCard, setIsSubmittingCard] = useState(false);
+  const [cardError, setCardError] = useState<string | null>(null);
+  const [cardholderName, setCardholderName] = useState("John Doe");
+  const [cardNumber, setCardNumber] = useState("");
+  const [expiryMonth, setExpiryMonth] = useState("");
+  const [expiryYear, setExpiryYear] = useState("");
+  const [cvc, setCvc] = useState("");
   const hasEmbedded = Boolean(
     checkout.ucp.services?.["dev.ucp.shopping"]?.some((svc) => svc.transport === "embedded")
+  );
+  const needsPaymentCredential = Boolean(
+    checkout.messages?.some((msg) => msg.code === "payment_credential_required")
   );
 
   const handlePayNow = async () => {
@@ -76,6 +104,52 @@ export function CheckoutCard({ checkout, onCompleteCheckout, onEcpComplete }: Ch
       await onCompleteCheckout(checkout.id);
     } finally {
       setIsProcessing(false);
+    }
+  };
+
+  const handleSubmitCard = async () => {
+    if (!onSubmitPaymentCredential) return;
+    setCardError(null);
+
+    const cardDigits = cardNumber.replace(/\s+/g, "");
+    const month = expiryMonth.trim();
+    const year = expiryYear.trim();
+    const cvv = cvc.trim();
+
+    if (!/^\d{13,19}$/.test(cardDigits)) {
+      setCardError("Enter a valid card number.");
+      return;
+    }
+    if (!/^\d{2}$/.test(month) || Number(month) < 1 || Number(month) > 12) {
+      setCardError("Enter a valid expiry month (MM).");
+      return;
+    }
+    if (!/^\d{2,4}$/.test(year)) {
+      setCardError("Enter a valid expiry year (YY or YYYY).");
+      return;
+    }
+    if (!/^\d{3,4}$/.test(cvv)) {
+      setCardError("Enter a valid CVC.");
+      return;
+    }
+
+    setIsSubmittingCard(true);
+    try {
+      await onSubmitPaymentCredential(checkout.id, {
+        cardNumber: cardDigits,
+        expiryMonth: month,
+        expiryYear: year,
+        cvc: cvv,
+        cardholderName: cardholderName.trim() || undefined,
+      });
+      setCardNumber("");
+      setExpiryMonth("");
+      setExpiryYear("");
+      setCvc("");
+    } catch (e) {
+      setCardError(e instanceof Error ? e.message : "Failed to save card details.");
+    } finally {
+      setIsSubmittingCard(false);
     }
   };
 
@@ -178,6 +252,73 @@ export function CheckoutCard({ checkout, onCompleteCheckout, onEcpComplete }: Ch
           })}
         </div>
       )}
+
+      {!hasEmbedded &&
+        !mockWalletEnabled &&
+        needsPaymentCredential &&
+        onSubmitPaymentCredential && (
+          <div className="px-4 sm:px-5 py-3 border-t bg-muted/20 space-y-2">
+            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Add Card Details
+            </div>
+            <Input
+              value={cardholderName}
+              onChange={(e) => setCardholderName(e.target.value)}
+              placeholder="Cardholder name"
+              autoComplete="cc-name"
+            />
+            <Input
+              value={cardNumber}
+              onChange={(e) => setCardNumber(e.target.value)}
+              placeholder="Card number"
+              inputMode="numeric"
+              autoComplete="cc-number"
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <Input
+                value={expiryMonth}
+                onChange={(e) => setExpiryMonth(e.target.value)}
+                placeholder="MM"
+                inputMode="numeric"
+                autoComplete="cc-exp-month"
+              />
+              <Input
+                value={expiryYear}
+                onChange={(e) => setExpiryYear(e.target.value)}
+                placeholder="YY"
+                inputMode="numeric"
+                autoComplete="cc-exp-year"
+              />
+            </div>
+            <Input
+              value={cvc}
+              onChange={(e) => setCvc(e.target.value)}
+              placeholder="CVC"
+              inputMode="numeric"
+              autoComplete="cc-csc"
+            />
+            {cardError && (
+              <div className="text-xs text-destructive">{cardError}</div>
+            )}
+            <Button
+              onClick={handleSubmitCard}
+              disabled={isSubmittingCard}
+              className="w-full"
+            >
+              {isSubmittingCard ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Saving Card...
+                </>
+              ) : (
+                "Save Card and Enable Mock Wallet"
+              )}
+            </Button>
+            <p className="text-[10px] text-center text-muted-foreground">
+              Demo only: card is tokenized locally in ChatHost and never sent as raw PAN to AgentPayCore.
+            </p>
+          </div>
+        )}
 
       {/* Order Confirmation */}
       {checkout.order && (
