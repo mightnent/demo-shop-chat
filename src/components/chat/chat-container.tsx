@@ -1,24 +1,38 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { MessageBubble } from "./message-bubble";
-import { ChatInput } from "./chat-input";
-import { ServerPanel } from "./server-panel";
-import { Button } from "@/components/ui/button";
-import { chatStore, Message, ChatState } from "@/lib/chat-store";
-import { mcpClient, MCPSession, MCPTool } from "@/lib/mcp-client";
-import { renderModeStore, RenderMode } from "@/lib/render-mode-store";
-import { UIActionResult } from "@mcp-ui/client";
-import { PanelLeftOpen, PanelRightClose, ToggleLeft, ToggleRight, SquarePen, Menu } from "lucide-react";
-import { getMockBuyerInfo, IS_DEMO_MODE } from "@/lib/mock-user";
-import { useAuth } from "@/components/auth/auth-provider";
-import { SlideOutMenu } from "./slide-out-menu";
-import { LoginDialog } from "@/components/auth/login-dialog";
+import React, { useEffect, useRef, useState } from "react";
 import OpenAI from "openai";
-import { formatPrice, isUcpCheckoutTool, parseUcpCheckoutResponse, UcpCheckoutData } from "@/lib/ucp-utils";
+import { UIActionResult } from "@mcp-ui/client";
+import {
+  Menu,
+  PanelLeftOpen,
+  PanelRightClose,
+  SquarePen,
+  ToggleLeft,
+  ToggleRight,
+} from "lucide-react";
+
+import { LoginDialog } from "@/components/auth/login-dialog";
+import { useAuth } from "@/components/auth/auth-provider";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { chatStore, ChatState, Message } from "@/lib/chat-store";
+import { mcpClient, MCPSession } from "@/lib/mcp-client";
+import { getMockBuyerInfo, IS_DEMO_MODE } from "@/lib/mock-user";
+import { RenderMode, renderModeStore } from "@/lib/render-mode-store";
+import {
+  UcpCheckoutData,
+  isUcpCheckoutTool,
+  parseUcpCheckoutResponse,
+} from "@/lib/ucp-utils";
+
+import { ChatInput } from "./chat-input";
+import { MessageBubble } from "./message-bubble";
+import { ServerPanel } from "./server-panel";
+import { SlideOutMenu } from "./slide-out-menu";
 
 const DEFAULT_MODEL = process.env.NEXT_PUBLIC_OPENAI_MODEL || "gpt-5.2";
+const MOCK_WALLET_STORAGE_KEY = "chat_host_mock_wallet_enabled";
 
 type LLMToolCall = {
   id: string;
@@ -47,8 +61,9 @@ Checkout flow:
 1) Help the user browse and decide what to buy.
 2) When they want to purchase, call create_checkout with line_items containing the product ID as a string.
 3) If buyer info is missing, call update_checkout to add it (email, first_name, last_name).
-4) If checkout offers embedded checkout (continue_url + embedded binding), let the UI handle payment via ECP.
-5) Otherwise, when status is ready_for_complete, call complete_checkout. If they cancel, call cancel_checkout.
+4) If checkout messages include payment_credential_required and host mock wallet is enabled, call update_checkout with tokenized payment instrument.
+5) If checkout messages include biometric_confirmation_required and host mock wallet is enabled, include host risk_signals proof on update/complete.
+6) When status is ready_for_complete, call complete_checkout. If they cancel, call cancel_checkout.
 
 UCP tool argument rules:
 - All UCP tools require a meta.ucp-agent.profile URL: "https://chat-host.local/profiles/shopping-agent.json".
@@ -67,40 +82,90 @@ function getToolText(result: any): string {
     .join("\n");
 }
 
-function injectUcpMeta(toolName: string, args: Record<string, unknown>): Record<string, unknown> {
+function buildMockPaymentPayload(checkoutId?: string) {
+  const instrumentId = checkoutId ? `instr_${checkoutId}` : `instr_${crypto.randomUUID()}`;
+  return {
+    payment: {
+      instruments: [
+        {
+          id: instrumentId,
+          handler_id: "mock_handler_1",
+          type: "token",
+          selected: true,
+          credential: { type: "mock_token", token: "tok_demo" },
+        },
+      ],
+    },
+    risk_signals: {
+      biometric_confirmation: {
+        approved: true,
+        method: "mock_faceid",
+      },
+      biometric_confirmed: true,
+    },
+  };
+}
+
+function injectUcpMeta(
+  toolName: string,
+  args: Record<string, unknown>,
+  options?: { mockWalletEnabled?: boolean }
+): Record<string, unknown> {
   if (!isUcpCheckoutTool(toolName)) return args;
 
+  const mockWalletEnabled = options?.mockWalletEnabled === true;
   const meta = (args.meta || {}) as Record<string, unknown>;
+
   if (!meta["ucp-agent"]) {
     meta["ucp-agent"] = {
       profile: "https://chat-host.local/profiles/shopping-agent.json",
     };
   }
-  if (
-    (toolName === "complete_checkout" || toolName === "cancel_checkout") &&
-    !meta["idempotency-key"]
-  ) {
+
+  if ((toolName === "complete_checkout" || toolName === "cancel_checkout") && !meta["idempotency-key"]) {
     meta["idempotency-key"] = crypto.randomUUID();
   }
-  if (toolName === "complete_checkout") {
-    if (!args.idempotency_key) {
-      args.idempotency_key = meta["idempotency-key"];
-    }
+
+  if (toolName === "complete_checkout" && !args.idempotency_key) {
+    args.idempotency_key = meta["idempotency-key"];
   }
 
-  // Auto-inject mock buyer info for create_checkout and update_checkout
   if (toolName === "create_checkout" || toolName === "update_checkout") {
     const checkout = (args.checkout || {}) as Record<string, unknown>;
+
     if (!checkout.buyer) {
       checkout.buyer = getMockBuyerInfo();
     }
+
+    if (mockWalletEnabled && !checkout.payment) {
+      const mockPayment = buildMockPaymentPayload(typeof args.id === "string" ? args.id : undefined);
+      checkout.payment = mockPayment.payment;
+      checkout.risk_signals = {
+        ...(checkout.risk_signals as Record<string, unknown> | undefined),
+        ...mockPayment.risk_signals,
+      };
+    }
+
     return { ...args, meta, checkout };
+  }
+
+  if (toolName === "complete_checkout" && mockWalletEnabled) {
+    const checkout = (args.checkout || {}) as Record<string, unknown>;
+
+    if (!checkout.payment || !checkout.risk_signals) {
+      const mockPayment = buildMockPaymentPayload(typeof args.id === "string" ? args.id : undefined);
+      checkout.payment = checkout.payment || mockPayment.payment;
+      checkout.risk_signals = {
+        ...(checkout.risk_signals as Record<string, unknown> | undefined),
+        ...mockPayment.risk_signals,
+      };
+      return { ...args, meta, checkout };
+    }
   }
 
   return { ...args, meta };
 }
 
-/** Call OpenAI via the server-side /api/chat proxy */
 async function callOpenAI(params: {
   messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[];
   tools?: OpenAI.Chat.Completions.ChatCompletionTool[];
@@ -123,7 +188,6 @@ async function callOpenAI(params: {
   return res.json() as Promise<LLMResponse>;
 }
 
-/** Shadow-persist a message to the DB (non-blocking) */
 function shadowPersistMessage(
   sessionId: string | null,
   role: string,
@@ -138,9 +202,7 @@ function shadowPersistMessage(
   }
 ) {
   if (IS_DEMO_MODE || !sessionId) return;
-  const metadata = richMeta && Object.keys(richMeta).some((k) => (richMeta as any)[k] != null)
-    ? richMeta
-    : undefined;
+  const metadata = richMeta && Object.keys(richMeta).some((k) => (richMeta as any)[k] != null) ? richMeta : undefined;
   fetch("/api/messages", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -155,12 +217,25 @@ export function ChatContainer() {
   const [renderMode, setRenderMode] = useState<RenderMode>(renderModeStore.getMode());
   const [dbSessionId, setDbSessionId] = useState<string | null>(null);
   const [slideOutOpen, setSlideOutOpen] = useState(false);
+  const [mockWalletEnabled, setMockWalletEnabled] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { isAdmin, isAuthenticated, isLoading } = useAuth();
   const canManageMcpServers = isAdmin;
   const isAuthEnabled = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true";
 
-  // Create a DB session on mount (auth mode only)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const stored = window.localStorage.getItem(MOCK_WALLET_STORAGE_KEY);
+    if (stored !== null) {
+      setMockWalletEnabled(stored === "true");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(MOCK_WALLET_STORAGE_KEY, String(mockWalletEnabled));
+  }, [mockWalletEnabled]);
+
   useEffect(() => {
     if (IS_DEMO_MODE || !isAuthenticated) return;
     fetch("/api/sessions", {
@@ -240,41 +315,21 @@ export function ChatContainer() {
 
     chatStore.setLoading(true);
     try {
-      const args = injectUcpMeta("complete_checkout", {
-        id: checkoutId,
-        checkout: {
-          payment: {
-            instruments: [
-              {
-                id: `instr_${checkoutId}`,
-                handler_id: "mock_handler_1",
-                type: "token",
-                selected: true,
-                credential: { type: "mock_token", token: "tok_demo" },
-              },
-            ],
-          },
+      const args = injectUcpMeta(
+        "complete_checkout",
+        {
+          id: checkoutId,
+          checkout: buildMockPaymentPayload(checkoutId),
         },
-      });
+        { mockWalletEnabled }
+      );
 
       const result = await mcpClient.callTool(match.serverUrl, "complete_checkout", args);
-      console.log("[Checkout] complete_checkout result:", result);
       const checkoutData = parseUcpCheckoutResponse(result);
-      console.log("[Checkout] parsed checkoutData:", checkoutData);
 
-      let messageContent: string;
-      if (checkoutData) {
-        if (checkoutData.status === "completed") {
-          const total = checkoutData.totals.find((t) => t.type === "total");
-          const itemNames = checkoutData.line_items.map((li) => li.item.title || `Product #${li.item.id}`).join(", ");
-          messageContent = "Payment completed.";
-        } else {
-          messageContent = `Checkout ${checkoutData.id} - Status: ${checkoutData.status}`;
-        }
-      } else {
-        const text = getToolText(result);
-        messageContent = text || "Payment processed. Unable to retrieve order details.";
-      }
+      const messageContent = checkoutData
+        ? `Checkout ${checkoutData.id} - Status: ${checkoutData.status}`
+        : getToolText(result) || "Payment processed. Unable to retrieve order details.";
 
       chatStore.addMessage({
         role: "assistant",
@@ -297,10 +352,6 @@ export function ChatContainer() {
   const handleEcpComplete = (checkout: UcpCheckoutData | undefined, serverUrl?: string) => {
     if (!checkout) return;
 
-    const total = checkout.totals.find((t) => t.type === "total");
-    const itemNames = checkout.line_items
-      .map((li) => li.item.title || `Product #${li.item.id}`)
-      .join(", ");
     const messageContent = "Payment completed.";
 
     chatStore.addMessage({
@@ -316,34 +367,25 @@ export function ChatContainer() {
   };
 
   const handleUIAction = async (action: UIActionResult) => {
-    const typedAction = action;
-
-    if (typedAction.type === "tool" && typedAction.payload?.toolName) {
+    if (action.type === "tool" && action.payload?.toolName) {
       const toolsWithServer = mcpClient.getToolsWithServer();
-      const match = toolsWithServer.find(
-        (t) => t.tool.name === typedAction.payload.toolName
-      );
+      const match = toolsWithServer.find((t) => t.tool.name === action.payload.toolName);
 
       if (match) {
         chatStore.setLoading(true);
         try {
-          const actionToolName = typedAction.payload.toolName;
-          const actionArgs = injectUcpMeta(
-            actionToolName,
-            typedAction.payload.params || {}
-          );
+          const actionToolName = action.payload.toolName;
+          const actionArgs = injectUcpMeta(actionToolName, action.payload.params || {}, {
+            mockWalletEnabled,
+          });
 
-          const result = await mcpClient.callTool(
-            match.serverUrl,
-            actionToolName,
-            actionArgs
-          );
+          const result = await mcpClient.callTool(match.serverUrl, actionToolName, actionArgs);
 
           if (isUcpCheckoutTool(actionToolName)) {
             const checkoutData = parseUcpCheckoutResponse(result);
             const content = checkoutData
               ? `Checkout ${checkoutData.id} - Status: ${checkoutData.status}`
-              : (getToolText(result) || `Tool ${actionToolName} executed.`);
+              : getToolText(result) || `Tool ${actionToolName} executed.`;
             chatStore.addMessage({
               role: "assistant",
               content,
@@ -375,9 +417,7 @@ export function ChatContainer() {
         } catch (error) {
           chatStore.addMessage({
             role: "assistant",
-            content: `Error executing tool: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
+            content: `Error executing tool: ${error instanceof Error ? error.message : "Unknown error"}`,
           });
         } finally {
           chatStore.setLoading(false);
@@ -395,15 +435,14 @@ export function ChatContainer() {
       const tools = mcpClient.getAllTools();
       const toolsWithServer = mcpClient.getToolsWithServer();
 
-      const openAITools: OpenAI.Chat.Completions.ChatCompletionTool[] =
-        tools.map((tool) => ({
-          type: "function" as const,
-          function: {
-            name: tool.name,
-            description: tool.description,
-            parameters: tool.inputSchema as Record<string, unknown>,
-          },
-        }));
+      const openAITools: OpenAI.Chat.Completions.ChatCompletionTool[] = tools.map((tool) => ({
+        type: "function" as const,
+        function: {
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.inputSchema as Record<string, unknown>,
+        },
+      }));
 
       const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
         { role: "system", content: UCP_SYSTEM_PROMPT },
@@ -428,66 +467,57 @@ export function ChatContainer() {
           let toolArgs = JSON.parse(toolCall.function.arguments || "{}");
 
           const match = toolsWithServer.find((t) => t.tool.name === toolName);
+          if (!match) continue;
 
-          if (match) {
-            // Auto-inject UCP meta for checkout tools
-            toolArgs = injectUcpMeta(toolName, toolArgs);
+          toolArgs = injectUcpMeta(toolName, toolArgs, { mockWalletEnabled });
+
+          chatStore.addMessage({
+            role: "assistant",
+            content: `Calling tool: ${toolName}`,
+            toolCall: { name: toolName, args: toolArgs },
+          });
+
+          const result = await mcpClient.callTool(match.serverUrl, toolName, toolArgs);
+
+          if (isUcpCheckoutTool(toolName)) {
+            const checkoutData = parseUcpCheckoutResponse(result);
+            const textSummary = checkoutData
+              ? `Checkout ${checkoutData.id} - Status: ${checkoutData.status}`
+              : getToolText(result) || "Checkout operation completed.";
 
             chatStore.addMessage({
               role: "assistant",
-              content: `Calling tool: ${toolName}`,
-              toolCall: { name: toolName, args: toolArgs },
+              content: textSummary,
+              ucpCheckout: checkoutData || undefined,
+              serverUrl: match.serverUrl,
             });
-
-            const result = await mcpClient.callTool(
-              match.serverUrl,
-              toolName,
-              toolArgs
+            shadowPersistMessage(dbSessionId, "assistant", textSummary, modelUsed, {
+              ucpCheckout: checkoutData || undefined,
+              serverUrl: match.serverUrl,
+            });
+          } else {
+            const uiResource = result.content.find(
+              (c) => c.type === "resource" && c.resource?.uri?.startsWith("ui://")
             );
 
-            // Handle UCP checkout tools differently from vendor tools
-            if (isUcpCheckoutTool(toolName)) {
-              const checkoutData = parseUcpCheckoutResponse(result);
-              const textSummary = checkoutData
-                ? `Checkout ${checkoutData.id} - Status: ${checkoutData.status}`
-                : (getToolText(result) || "Checkout operation completed.");
+            const textContent = result.content
+              .filter((c) => c.type === "text")
+              .map((c) => c.text)
+              .join("\n");
 
-              chatStore.addMessage({
-                role: "assistant",
-                content: textSummary,
-                ucpCheckout: checkoutData || undefined,
-                serverUrl: match.serverUrl,
-              });
-              shadowPersistMessage(dbSessionId, "assistant", textSummary, modelUsed, {
-                ucpCheckout: checkoutData || undefined,
-                serverUrl: match.serverUrl,
-              });
-            } else {
-              // Existing vendor tool handling
-              const uiResource = result.content.find(
-                (c) =>
-                  c.type === "resource" && c.resource?.uri?.startsWith("ui://")
-              );
-
-              const textContent = result.content
-                .filter((c) => c.type === "text")
-                .map((c) => c.text)
-                .join("\n");
-
-              const msgContent = textContent || "Tool executed successfully.";
-              chatStore.addMessage({
-                role: "assistant",
-                content: msgContent,
-                uiResource: uiResource?.resource,
-                mcpAppsResourceUri: result._meta?.ui?.resourceUri,
-                serverUrl: match.serverUrl,
-              });
-              shadowPersistMessage(dbSessionId, "assistant", msgContent, modelUsed, {
-                uiResource: uiResource?.resource,
-                mcpAppsResourceUri: result._meta?.ui?.resourceUri,
-                serverUrl: match.serverUrl,
-              });
-            }
+            const msgContent = textContent || "Tool executed successfully.";
+            chatStore.addMessage({
+              role: "assistant",
+              content: msgContent,
+              uiResource: uiResource?.resource,
+              mcpAppsResourceUri: result._meta?.ui?.resourceUri,
+              serverUrl: match.serverUrl,
+            });
+            shadowPersistMessage(dbSessionId, "assistant", msgContent, modelUsed, {
+              uiResource: uiResource?.resource,
+              mcpAppsResourceUri: result._meta?.ui?.resourceUri,
+              serverUrl: match.serverUrl,
+            });
           }
         }
       } else if (assistantMessage.content) {
@@ -500,9 +530,7 @@ export function ChatContainer() {
     } catch (error) {
       chatStore.addMessage({
         role: "assistant",
-        content: `Error: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`,
+        content: `Error: ${error instanceof Error ? error.message : "Unknown error"}`,
       });
     } finally {
       chatStore.setLoading(false);
@@ -536,12 +564,7 @@ export function ChatContainer() {
               <span className="text-xs text-muted-foreground">
                 {renderMode === "classic" ? "Classic MCP-UI" : "MCP Apps"}
               </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={toggleRenderMode}
-                className="gap-2"
-              >
+              <Button variant="outline" size="sm" onClick={toggleRenderMode} className="gap-2">
                 {renderMode === "classic" ? (
                   <ToggleLeft className="h-4 w-4" />
                 ) : (
@@ -574,6 +597,14 @@ export function ChatContainer() {
           <div className="flex-1">
             <h1 className="text-lg font-semibold">Chat</h1>
           </div>
+          <Button
+            variant={mockWalletEnabled ? "default" : "outline"}
+            size="sm"
+            className="hidden sm:inline-flex"
+            onClick={() => setMockWalletEnabled((v) => !v)}
+          >
+            {mockWalletEnabled ? "Mock Wallet On" : "Mock Wallet Off"}
+          </Button>
           <Button
             variant="ghost"
             size="icon"
@@ -619,9 +650,7 @@ export function ChatContainer() {
           <div className="max-w-5xl mx-auto space-y-4 sm:space-y-6">
             {state.messages.length === 0 ? (
               <div className="text-center py-12">
-                <p className="text-muted-foreground">
-                  Start Chatting!
-                </p>
+                <p className="text-muted-foreground">Start Chatting!</p>
               </div>
             ) : (
               state.messages.map((message) => (
@@ -655,7 +684,6 @@ export function ChatContainer() {
         onNewChat={() => {
           chatStore.clearMessages();
           setDbSessionId(null);
-          // Create a fresh DB session for the new chat
           if (!IS_DEMO_MODE && isAuthenticated) {
             fetch("/api/sessions", {
               method: "POST",
