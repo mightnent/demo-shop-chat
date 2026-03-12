@@ -152,8 +152,31 @@ export const auditEvents = pgTable(
   ]
 );
 
+export const claimsRoutes = pgTable(
+  "claims_routes",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: text("tenant_id").notNull().default("default"),
+    routeKey: text("route_key").notNull(),
+    pageUrl: text("page_url").notNull(),
+    pathPrefixes: jsonb("path_prefixes").$type<string[]>().notNull(),
+    keywords: jsonb("keywords").$type<string[]>().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("claims_routes_tenant_key_idx").on(table.tenantId, table.routeKey),
+    index("claims_routes_tenant_updated_idx").on(table.tenantId, table.updatedAt),
+  ]
+);
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type ChatSession = typeof chatSessions.$inferSelect;
 export type ChatMessage = typeof chatMessages.$inferSelect;
 export type AuditEvent = typeof auditEvents.$inferSelect;
+export type ClaimsRouteRow = typeof claimsRoutes.$inferSelect;

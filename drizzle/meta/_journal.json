@@ -15,6 +15,13 @@
       "when": 1770735790134,
       "tag": "0001_glamorous_firelord",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1773293802940,
+      "tag": "0002_even_korvac",
+      "breakpoints": true
     }
   ]
 }

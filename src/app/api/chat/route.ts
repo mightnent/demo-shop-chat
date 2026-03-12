@@ -8,6 +8,7 @@ import {
   getSystemInstructions,
   clearSystemInstructionsCache,
 } from "@/lib/guardrails";
+import { ClaimsRoute, listClaimsRoutesCached } from "@/lib/claims-routes";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || "",
@@ -81,56 +82,6 @@ type CachedResponse = {
 };
 
 const claimsResponseCache = new Map<string, CachedResponse>();
-
-type ClaimsRoute = {
-  key: string;
-  pageUrl: string;
-  pathPrefixes: string[];
-  keywords: string[];
-};
-
-const CLAIMS_ROUTES: ClaimsRoute[] = [
-  {
-    key: "motor",
-    pageUrl: "https://www.income.com.sg/claims/motor-insurance",
-    pathPrefixes: ["/claims/motor-insurance", "/claims/reporting-centres"],
-    keywords: [
-      "motor",
-      "car",
-      "vehicle",
-      "accident",
-      "theft",
-      "stolen",
-      "windscreen",
-      "private settlement",
-      "reporting centre",
-    ],
-  },
-  {
-    key: "travel",
-    pageUrl: "https://www.income.com.sg/claims/travel-claims",
-    pathPrefixes: ["/claims/travel-claims"],
-    keywords: ["travel", "trip", "flight", "baggage", "overseas"],
-  },
-  {
-    key: "home",
-    pageUrl: "https://www.income.com.sg/claims/home-insurance-claims",
-    pathPrefixes: ["/claims/home-insurance-claims"],
-    keywords: ["home", "house", "fire", "flood", "renovation"],
-  },
-  {
-    key: "domestic-helper",
-    pageUrl: "https://www.income.com.sg/claims/domestic-helper-insurance-claims",
-    pathPrefixes: ["/claims/domestic-helper-insurance-claims"],
-    keywords: ["domestic helper", "maid", "helper", "fdw"],
-  },
-  {
-    key: "property-liability",
-    pageUrl: "https://www.income.com.sg/claims/property-liability-claim",
-    pathPrefixes: ["/claims/property-liability-claim"],
-    keywords: ["property liability", "liability", "third party", "injury", "damage"],
-  },
-];
 
 // ── Helpers ──
 
@@ -218,11 +169,11 @@ function canonicalizeClaimsUrl(url: string): string {
   }
 }
 
-function detectClaimsRoute(text: string): ClaimsRoute | null {
+function detectClaimsRoute(text: string, routes: ClaimsRoute[]): ClaimsRoute | null {
   const normalized = ` ${text.toLowerCase()} `;
   let best: { route: ClaimsRoute; score: number } | null = null;
 
-  for (const route of CLAIMS_ROUTES) {
+  for (const route of routes) {
     let score = 0;
     for (const keyword of route.keywords) {
       if (normalized.includes(` ${keyword.toLowerCase()} `)) {
@@ -828,7 +779,8 @@ export async function POST(request: Request) {
 
     const inputMessages = toResponsesInput(messages);
     const modelToUse = model || DEFAULT_MODEL;
-    const matchedRoute = detectClaimsRoute(latestUserText);
+    const claimsRoutes = await listClaimsRoutesCached();
+    const matchedRoute = detectClaimsRoute(latestUserText, claimsRoutes);
     const routeKey = matchedRoute?.key || "general";
     const cacheKey = `${CLAIMS_CACHE_VERSION}:${routeKey}:${normalizeQuestion(latestUserText)}`;
     const cached = claimsResponseCache.get(cacheKey);

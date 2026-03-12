@@ -3,11 +3,12 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Users, MessageSquare, FileText, ArrowLeft } from "lucide-react";
+import { Users, MessageSquare, FileText, ArrowLeft, Link2 } from "lucide-react";
 
 const NAV_ITEMS = [
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/sessions", label: "Sessions", icon: MessageSquare },
+  { href: "/admin/claims-routes", label: "Claims Routes", icon: Link2 },
   { href: "/admin/audit", label: "Audit Log", icon: FileText },
 ];
 
