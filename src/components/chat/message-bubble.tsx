@@ -3,6 +3,7 @@
 import React, { useMemo, useState, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { Message } from "@/lib/chat-store";
@@ -51,6 +52,11 @@ export function MessageBubble({
   renderMode = "classic",
   mockWalletEnabled = true,
 }: MessageBubbleProps) {
+  const citationLabel = (title?: string) => {
+    const trimmed = title?.trim();
+    return trimmed && trimmed.length > 0 ? trimmed : "Source";
+  };
+
   const isUser = message.role === "user";
   const [mcpAppsResource, setMcpAppsResource] = useState<UIResource | null>(null);
   const [isLoadingMcpApps, setIsLoadingMcpApps] = useState(false);
@@ -128,7 +134,22 @@ export function MessageBubble({
           )}
         >
           <div className="prose prose-sm dark:prose-invert max-w-none break-words">
-            <ReactMarkdown>{message.content}</ReactMarkdown>
+            <ReactMarkdown
+              components={{
+                a: ({ href, children }) => (
+                  <a
+                    href={href}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium no-underline hover:bg-muted/70"
+                  >
+                    {children}
+                  </a>
+                ),
+              }}
+            >
+              {message.content}
+            </ReactMarkdown>
           </div>
         </Card>
 
@@ -140,18 +161,23 @@ export function MessageBubble({
         )}
 
         {message.citations && message.citations.length > 0 && (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex gap-2 pt-0.5 overflow-x-auto max-w-full scrollbar-thin pb-1">
             {message.citations.map((citation) => (
               <a
                 key={citation.url}
                 href={citation.url}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs text-foreground/90 hover:bg-muted transition-colors"
+                className="inline-flex shrink-0"
                 title={citation.title}
               >
-                <span className="max-w-[220px] truncate">{citation.title || citation.url}</span>
-                <ExternalLink className="h-3 w-3 shrink-0" />
+                <Badge
+                  variant="secondary"
+                  className="max-w-[240px] cursor-pointer gap-1 rounded-full border px-2.5 py-1 text-xs font-normal hover:bg-muted/80 whitespace-nowrap"
+                >
+                  <span className="truncate">{citationLabel(citation.title)}</span>
+                  <ExternalLink className="h-3 w-3 shrink-0" />
+                </Badge>
               </a>
             ))}
           </div>

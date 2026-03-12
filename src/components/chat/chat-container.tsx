@@ -801,7 +801,7 @@ export function ChatContainer() {
           <div className="max-w-5xl mx-auto space-y-4 sm:space-y-6">
             {state.messages.length === 0 ? (
               <div className="text-center py-12">
-                <p className="text-muted-foreground">Ask about Income motor claims.</p>
+                <p className="text-muted-foreground">Ask anything about Income Claims!</p>
               </div>
             ) : (
               state.messages.map((message) => (
