@@ -2,11 +2,17 @@ import { v4 as uuidv4 } from "uuid";
 import { UIResource } from "./mcp-client";
 import type { UcpCheckoutData } from "./ucp-utils";
 
+export interface MessageCitation {
+  title: string;
+  url: string;
+}
+
 export interface Message {
   id: string;
   role: "user" | "assistant" | "system";
   content: string;
   timestamp: Date;
+  citations?: MessageCitation[];
   uiResource?: UIResource;
   mcpAppsResourceUri?: string;
   serverUrl?: string;

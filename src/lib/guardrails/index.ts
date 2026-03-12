@@ -3,7 +3,10 @@ import { readFileSync } from "fs";
 import { join } from "path";
 
 const REFUSAL_MESSAGE =
-  "I can't help with that. I can assist you with product discovery, comparisons, and checkout support.";
+  "I can only help with Income motor claims questions and steps from the claims pages.";
+
+const CLAIMS_SCOPE_REFUSAL_MESSAGE =
+  "I can only help with Income motor claims questions and steps from the claims pages.";
 
 let cachedSystemInstructions: string | null = null;
 
@@ -53,6 +56,12 @@ async function moderate(
 export type ModerationResult =
   | { blocked: false }
   | { blocked: true; refusalMessage: string };
+
+export type ClaimsScopeResult = {
+  inScope: boolean;
+  normalizedText: string;
+  matchedKeywords: string[];
+};
 
 /**
  * Input Moderation Gate — run before calling the model.
@@ -127,4 +136,54 @@ function isGuardrailEnabled(envKey: string): boolean {
 
 function isFailClosed(): boolean {
   return process.env.GUARDRAILS_FAIL_CLOSED !== "false"; // default true
+}
+
+const CLAIMS_KEYWORDS = [
+  "claim",
+  "claims",
+  "accident",
+  "stolen",
+  "theft",
+  "vehicle",
+  "car",
+  "motor",
+  "policy",
+  "report",
+  "form",
+  "document",
+  "workshop",
+  "repair",
+  "tow",
+  "own damage",
+  "third party",
+  "windscreen",
+  "police report",
+  "income",
+];
+
+const SMALL_TALK_REGEX =
+  /^(hi|hello|hey|yo|sup|howdy|good (morning|afternoon|evening)|thanks?|thank you)[!.?]*$/i;
+
+export function isSimpleSmallTalk(text: string): boolean {
+  return SMALL_TALK_REGEX.test(text.trim());
+}
+
+export function getClaimsScopeRefusalMessage(): string {
+  return CLAIMS_SCOPE_REFUSAL_MESSAGE;
+}
+
+export function assessClaimsScope(text: string): ClaimsScopeResult {
+  const normalizedText = text.trim().toLowerCase();
+  if (!normalizedText) {
+    return { inScope: false, normalizedText, matchedKeywords: [] };
+  }
+
+  if (isSimpleSmallTalk(normalizedText)) {
+    return { inScope: true, normalizedText, matchedKeywords: ["small-talk"] };
+  }
+
+  const matchedKeywords = CLAIMS_KEYWORDS.filter((keyword) => normalizedText.includes(keyword));
+  const inScope = matchedKeywords.length > 0;
+
+  return { inScope, normalizedText, matchedKeywords };
 }

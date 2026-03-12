@@ -16,7 +16,7 @@ import { LoginDialog } from "@/components/auth/login-dialog";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { chatStore, ChatState, Message } from "@/lib/chat-store";
+import { chatStore, ChatState, Message, MessageCitation } from "@/lib/chat-store";
 import { mcpClient, MCPSession } from "@/lib/mcp-client";
 import { getMockBuyerInfo, IS_DEMO_MODE } from "@/lib/mock-user";
 import { RenderMode, renderModeStore } from "@/lib/render-mode-store";
@@ -36,52 +36,6 @@ const MOCK_WALLET_STORAGE_KEY = "chat_host_mock_wallet_enabled";
 const MCP_SERVERS_STORAGE_KEY = "mcpSavedServers";
 const DEFAULT_MCP_SERVER_URL = process.env.NEXT_PUBLIC_DEFAULT_MCP_SERVER_URL?.trim() || "";
 const DEFAULT_MCP_SERVER_NAME = process.env.NEXT_PUBLIC_DEFAULT_MCP_SERVER_NAME?.trim();
-
-type LLMToolCall = {
-  id: string;
-  type: "function";
-  function: {
-    name: string;
-    arguments: string;
-  };
-};
-
-type LLMResponse = {
-  model: string;
-  assistantMessage: {
-    content: string;
-    toolCalls: LLMToolCall[];
-  };
-};
-
-const UCP_SYSTEM_PROMPT = `You are a friendly commerce assistant. You can have natural conversations while helping users discover and buy products.
-
-Conversation style:
-- Keep responses concise and warm. Small talk and casual questions are fine — respond naturally without forcing a shopping angle.
-- Most interactions will be shopping-focused, but you don't need to redirect every message to products.
-
-Product discovery:
-- Call recommend_products when the user clearly wants to find or buy something.
-- When calling, pass a concise keyword (2–4 words max, e.g. "black coffee", "low-calorie coffee", "gift headphones under $50"). Do not pass full sentences — the keyword is used for search and scoring.
-- After getting results, reason about whether each product actually fits the user's needs before presenting it. If the top results don't match well, say so honestly and ask a clarifying question.
-- Don't call tools for casual conversation or informational questions — just respond.
-
-Checkout flow:
-1) Help the user browse and decide what to buy.
-2) When they want to purchase, call create_checkout with line_items containing the product ID as a string.
-3) If buyer info is missing, call update_checkout to add it (email, first_name, last_name).
-4) If checkout messages include payment_credential_required and host mock wallet is enabled, call update_checkout with tokenized payment instrument.
-5) If checkout messages include biometric_confirmation_required and host mock wallet is enabled, include host risk_signals proof on update/complete.
-6) When status is ready_for_complete, call complete_checkout. If they cancel, call cancel_checkout.
-
-UCP tool argument rules:
-- All UCP tools require a meta.ucp-agent.profile URL: "https://chat-host.local/profiles/shopping-agent.json".
-- complete_checkout and cancel_checkout also need meta["idempotency-key"] (use any UUID string).
-- complete_checkout may also include top-level idempotency_key (if present, it must match meta["idempotency-key"]).
-- For get/update/complete/cancel, the checkout session id is top-level, not inside checkout.
-- checkout contains domain data (buyer, line_items, currency). Product IDs must be strings.
-
-When presenting checkout results, summarize status and key details conversationally. The checkout card UI renders automatically.`;
 
 function getToolText(result: any): string {
   if (!result || !result.content) return "";
@@ -183,17 +137,22 @@ function injectUcpMeta(
   return { ...args, meta };
 }
 
-async function callOpenAI(params: {
+async function streamOpenAI(params: {
   messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[];
-  tools?: OpenAI.Chat.Completions.ChatCompletionTool[];
-}): Promise<LLMResponse> {
+  onDelta: (chunk: string) => void;
+  onDone: (payload: {
+    model: string;
+    content: string;
+    citations: MessageCitation[];
+  }) => void;
+}): Promise<void> {
   const res = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       messages: params.messages,
-      tools: params.tools,
       model: DEFAULT_MODEL,
+      stream: true,
     }),
   });
 
@@ -202,7 +161,68 @@ async function callOpenAI(params: {
     throw new Error(err.error || `Chat request failed (${res.status})`);
   }
 
-  return res.json() as Promise<LLMResponse>;
+  if (!res.body) {
+    throw new Error("Streaming response body missing");
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  const parseEvent = (rawEvent: string) => {
+    const lines = rawEvent.split("\n");
+    let event = "message";
+    let data = "";
+
+    for (const line of lines) {
+      if (line.startsWith("event:")) {
+        event = line.slice(6).trim();
+      } else if (line.startsWith("data:")) {
+        data += line.slice(5).trimStart();
+      }
+    }
+
+    if (!data) return;
+    const parsed = JSON.parse(data) as Record<string, unknown>;
+
+    if (event === "delta" && typeof parsed.text === "string") {
+      params.onDelta(parsed.text);
+      return;
+    }
+
+    if (event === "done") {
+      params.onDone({
+        model: typeof parsed.model === "string" ? parsed.model : DEFAULT_MODEL,
+        content: typeof parsed.content === "string" ? parsed.content : "",
+        citations: Array.isArray(parsed.citations)
+          ? (parsed.citations as MessageCitation[])
+          : [],
+      });
+      return;
+    }
+
+    if (event === "error") {
+      throw new Error(
+        typeof parsed.message === "string" ? parsed.message : "Streaming error"
+      );
+    }
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    let delimiterIndex = buffer.indexOf("\n\n");
+    while (delimiterIndex !== -1) {
+      const rawEvent = buffer.slice(0, delimiterIndex);
+      buffer = buffer.slice(delimiterIndex + 2);
+      if (rawEvent.trim()) {
+        parseEvent(rawEvent);
+      }
+      delimiterIndex = buffer.indexOf("\n\n");
+    }
+  }
 }
 
 function shadowPersistMessage(
@@ -211,6 +231,7 @@ function shadowPersistMessage(
   content: string,
   modelName?: string,
   richMeta?: {
+    citations?: MessageCitation[];
     uiResource?: any;
     mcpAppsResourceUri?: string;
     serverUrl?: string;
@@ -379,6 +400,7 @@ export function ChatContainer() {
           role: m.role as "user" | "assistant" | "system",
           content: m.content,
           timestamp: new Date(m.createdAt),
+          citations: meta.citations || undefined,
           uiResource: meta.uiResource || undefined,
           mcpAppsResourceUri: meta.mcpAppsResourceUri || undefined,
           serverUrl: meta.serverUrl || undefined,
@@ -608,22 +630,7 @@ export function ChatContainer() {
     chatStore.setLoading(true);
 
     try {
-      const tools = mcpClient.getAllTools();
-      const toolsWithServer = mcpClient.getToolsWithServer();
-
-      const openAITools: OpenAI.Chat.Completions.ChatCompletionTool[] = tools
-        .filter((tool) => tool.name !== "list_products")
-        .map((tool) => ({
-          type: "function" as const,
-          function: {
-            name: tool.name,
-            description: tool.description,
-            parameters: tool.inputSchema as Record<string, unknown>,
-          },
-        }));
-
       const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-        { role: "system", content: UCP_SYSTEM_PROMPT },
         ...state.messages.map((msg) => ({
           role: msg.role as "user" | "assistant" | "system",
           content: msg.content,
@@ -631,79 +638,35 @@ export function ChatContainer() {
         { role: "user", content },
       ];
 
-      const response = await callOpenAI({
+      const assistant = chatStore.addMessage({
+        role: "assistant",
+        content: "",
+      });
+      let runningContent = "";
+      let modelUsed = DEFAULT_MODEL;
+      let finalCitations: MessageCitation[] = [];
+
+      await streamOpenAI({
         messages,
-        tools: openAITools.length > 0 ? openAITools : undefined,
+        onDelta: (chunk) => {
+          runningContent += chunk;
+          chatStore.updateMessage(assistant.id, { content: runningContent });
+        },
+        onDone: (payload) => {
+          modelUsed = payload.model;
+          runningContent = payload.content || runningContent;
+          finalCitations = payload.citations || [];
+          chatStore.updateMessage(assistant.id, {
+            content: runningContent,
+            citations: finalCitations,
+          });
+        },
       });
 
-      const assistantMessage = response.assistantMessage;
-      const modelUsed = response.model;
-
-      if (assistantMessage.toolCalls.length > 0) {
-        for (const toolCall of assistantMessage.toolCalls) {
-          const toolName = toolCall.function.name;
-          let toolArgs = JSON.parse(toolCall.function.arguments || "{}");
-
-          const match = toolsWithServer.find((t) => t.tool.name === toolName);
-          if (!match) continue;
-
-          toolArgs = injectUcpMeta(toolName, toolArgs, { mockWalletEnabled });
-
-          chatStore.addMessage({
-            role: "assistant",
-            content: `Calling tool: ${toolName}`,
-            toolCall: { name: toolName, args: toolArgs },
-          });
-
-          const result = await mcpClient.callTool(match.serverUrl, toolName, toolArgs);
-
-          if (isUcpCheckoutTool(toolName)) {
-            const checkoutData = parseUcpCheckoutResponse(result);
-            const textSummary = checkoutData
-              ? `Checkout ${checkoutData.id} - Status: ${checkoutData.status}`
-              : getToolText(result) || "Checkout operation completed.";
-
-            chatStore.addMessage({
-              role: "assistant",
-              content: textSummary,
-              ucpCheckout: checkoutData || undefined,
-              serverUrl: match.serverUrl,
-            });
-            shadowPersistMessage(dbSessionId, "assistant", textSummary, modelUsed, {
-              ucpCheckout: checkoutData || undefined,
-              serverUrl: match.serverUrl,
-            });
-          } else {
-            const uiResource = result.content.find(
-              (c) => c.type === "resource" && c.resource?.uri?.startsWith("ui://")
-            );
-
-            const textContent = result.content
-              .filter((c) => c.type === "text")
-              .map((c) => c.text)
-              .join("\n");
-
-            const msgContent = textContent || "Tool executed successfully.";
-            chatStore.addMessage({
-              role: "assistant",
-              content: msgContent,
-              uiResource: uiResource?.resource,
-              mcpAppsResourceUri: result._meta?.ui?.resourceUri,
-              serverUrl: match.serverUrl,
-            });
-            shadowPersistMessage(dbSessionId, "assistant", msgContent, modelUsed, {
-              uiResource: uiResource?.resource,
-              mcpAppsResourceUri: result._meta?.ui?.resourceUri,
-              serverUrl: match.serverUrl,
-            });
-          }
-        }
-      } else if (assistantMessage.content) {
-        chatStore.addMessage({
-          role: "assistant",
-          content: assistantMessage.content,
+      if (runningContent.trim()) {
+        shadowPersistMessage(dbSessionId, "assistant", runningContent, modelUsed, {
+          citations: finalCitations,
         });
-        shadowPersistMessage(dbSessionId, "assistant", assistantMessage.content, modelUsed);
       }
     } catch (error) {
       chatStore.addMessage({
@@ -838,7 +801,7 @@ export function ChatContainer() {
           <div className="max-w-5xl mx-auto space-y-4 sm:space-y-6">
             {state.messages.length === 0 ? (
               <div className="text-center py-12">
-                <p className="text-muted-foreground">Start Chatting!</p>
+                <p className="text-muted-foreground">Ask about Income motor claims.</p>
               </div>
             ) : (
               state.messages.map((message) => (
@@ -862,7 +825,7 @@ export function ChatContainer() {
             <ChatInput
               onSend={handleSendMessage}
               disabled={state.isLoading}
-              placeholder="Ask me anything..."
+              placeholder="Ask about accident steps, claims process, or forms..."
             />
           </div>
         </footer>

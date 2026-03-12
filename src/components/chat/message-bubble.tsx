@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { Message } from "@/lib/chat-store";
 import { mcpClient, UIResource } from "@/lib/mcp-client";
 import { UIActionResult, UIResourceRenderer } from "@mcp-ui/client";
-import { Bot, User, Loader2 } from "lucide-react";
+import { Bot, User, Loader2, ExternalLink } from "lucide-react";
 import { RenderMode } from "@/lib/render-mode-store";
 import { CheckoutCard } from "./checkout-card";
 
@@ -137,6 +137,24 @@ export function MessageBubble({
             <span className="font-medium">Tool: </span>
             {message.toolCall.name}
           </Card>
+        )}
+
+        {message.citations && message.citations.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {message.citations.map((citation) => (
+              <a
+                key={citation.url}
+                href={citation.url}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs text-foreground/90 hover:bg-muted transition-colors"
+                title={citation.title}
+              >
+                <span className="max-w-[220px] truncate">{citation.title || citation.url}</span>
+                <ExternalLink className="h-3 w-3 shrink-0" />
+              </a>
+            ))}
+          </div>
         )}
 
         {renderMode === "mcp-apps" && isLoadingMcpApps && (
